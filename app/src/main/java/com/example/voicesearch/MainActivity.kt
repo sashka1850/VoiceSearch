@@ -1,10 +1,13 @@
 package com.example.voicesearch
 
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.view.MotionEvent
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
@@ -12,8 +15,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.*
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.Locale
@@ -28,11 +29,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var resultText: TextView
     private lateinit var progressBar: ProgressBar
+
+    private var speechRecognizer: SpeechRecognizer? = null
     private var isListening = false
+    private var currentSpeech = ""
 
     companion object {
         private const val REQUEST_RECORD_AUDIO_PERMISSION = 101
-        private const val VOICE_RECOGNITION_REQUEST_CODE = 100
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,7 +55,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         TextView(this).apply {
-            text = "ЗАЖМИТЕ кнопку и скажите 8 цифр"
+            text = "ЗАЖМИТЕ кнопку и говорите 8 цифр"
             textSize = 14f
             gravity = android.view.Gravity.CENTER
             setPadding(0, 0, 0, 30)
@@ -106,7 +109,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         statusText = TextView(this).apply {
-            text = "ЗАЖМИТЕ кнопку и скажите 8 цифр"
+            text = "ЗАЖМИТЕ кнопку и говорите 8 цифр"
             setBackgroundColor(android.graphics.Color.LTGRAY)
             setPadding(20, 20, 20, 20)
             layoutParams = LinearLayout.LayoutParams(
@@ -130,16 +133,16 @@ class MainActivity : AppCompatActivity() {
         setContentView(layout)
 
         checkMicrophonePermission()
+        initSpeechRecognizer()
 
-        // УДЕРЖАНИЕ КНОПКИ ДЛЯ ЗАПИСИ
         micButton.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    startVoiceRecognition()
+                    startListening()
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    // Ничего не делаем, распознавание само завершится
+                    stopListening()
                     true
                 }
                 else -> false
@@ -157,65 +160,117 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startVoiceRecognition() {
+    private fun initSpeechRecognizer() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            statusText.text = "Голосовое распознавание не доступно"
+            micButton.isEnabled = false
+            return
+        }
 
-        if (isListening) return
-
-        isListening = true
-        micButton.text = "🎙️ СЛУШАЮ..."
-        statusText.text = "Слушаю... Говорите 8 цифр"
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale("ru", "RU"))
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Скажите 8 цифр")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000)
         }
 
-        try {
-            startActivityForResult(intent, VOICE_RECOGNITION_REQUEST_CODE)
-        } catch (e: Exception) {
-            isListening = false
-            micButton.text = "🎤 ЗАЖМИТЕ ДЛЯ ГОЛОСА"
-            statusText.text = "Голосовое распознавание не доступно"
-            Toast.makeText(this, "Установите Google Voice", Toast.LENGTH_LONG).show()
-        }
+        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                isListening = true
+                currentSpeech = ""
+                micButton.text = "🎙️ ГОВОРИТЕ..."
+                statusText.text = "Говорите 8 цифр..."
+            }
+
+            override fun onBeginningOfSpeech() {}
+
+            override fun onRmsChanged(rmsdB: Float) {}
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {
+                // Не останавливаем здесь, ждем onResults
+            }
+
+            override fun onError(error: Int) {
+                isListening = false
+                micButton.text = "🎤 ЗАЖМИТЕ ДЛЯ ГОЛОСА"
+                val errorMsg = when (error) {
+                    SpeechRecognizer.ERROR_NO_MATCH -> "Не удалось распознать"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Речь не detected"
+                    else -> "Ошибка: $error"
+                }
+                statusText.text = errorMsg
+            }
+
+            override fun onResults(results: Bundle?) {
+                isListening = false
+                micButton.text = "🎤 ЗАЖМИТЕ ДЛЯ ГОЛОСА"
+
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val spokenText = matches?.firstOrNull() ?: ""
+
+                if (spokenText.isNotEmpty()) {
+                    val digits = spokenText.replace(Regex("[^0-9]"), "")
+
+                    if (digits.length >= 8) {
+                        val last8 = digits.takeLast(8)
+                        numberInput.setText(last8)
+                        statusText.text = "Распознано: \"$spokenText\" -> ищу $last8"
+                        performSearch(last8)
+                    } else if (digits.isNotEmpty()) {
+                        statusText.text = "Распознано только ${digits.length} цифр: $digits"
+                        numberInput.setText(digits)
+                        Toast.makeText(this@MainActivity, "Нужно 8 цифр. Сказано: $spokenText", Toast.LENGTH_LONG).show()
+                    } else {
+                        statusText.text = "В сказанном не найдено цифр"
+                    }
+                } else {
+                    statusText.text = "Не удалось распознать речь"
+                }
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val partialText = matches?.firstOrNull() ?: ""
+                if (partialText.isNotEmpty()) {
+                    currentSpeech = partialText
+                    val digits = partialText.replace(Regex("[^0-9]"), "")
+                    statusText.text = "🎙️ $partialText"
+
+                    // Если уже есть 8 цифр, можно остановить запись
+                    if (digits.length >= 8) {
+                        stopListening()
+                    }
+                }
+            }
+
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+
+        speechRecognizer?.startListening(intent)
+        speechRecognizer?.stopListening()
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
+    private fun startListening() {
 
-        isListening = false
-        micButton.text = "🎤 ЗАЖМИТЕ ДЛЯ ГОЛОСА"
+        if (isListening) return
 
-        if (requestCode == VOICE_RECOGNITION_REQUEST_CODE && resultCode == RESULT_OK) {
-            val matches = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val spokenText = matches?.firstOrNull() ?: ""
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale("ru", "RU"))
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
 
-            if (spokenText.isNotEmpty()) {
-                val digits = spokenText.replace(Regex("[^0-9]"), "")
+        speechRecognizer?.startListening(intent)
+    }
 
-                if (digits.length >= 8) {
-                    // Берем последние 8 цифр и сразу ищем
-                    val last8 = digits.takeLast(8)
-                    numberInput.setText(last8)
-                    statusText.text = "Распознано: \"$spokenText\" -> ищу $last8"
-                    // Закрываем диалог и сразу ищем
-                    performSearch(last8)
-                } else if (digits.isNotEmpty()) {
-                    statusText.text = "Распознано только ${digits.length} цифр: $digits"
-                    numberInput.setText(digits)
-                    Toast.makeText(this, "Нужно 8 цифр. Сказано: $spokenText", Toast.LENGTH_LONG).show()
-                } else {
-                    statusText.text = "В сказанном не найдено цифр"
-                    Toast.makeText(this, "Не удалось найти цифры в: $spokenText", Toast.LENGTH_LONG).show()
-                }
-            } else {
-                statusText.text = "Не удалось распознать речь"
-            }
+    private fun stopListening() {
+        if (isListening) {
+            speechRecognizer?.stopListening()
         }
     }
 
@@ -228,7 +283,6 @@ class MainActivity : AppCompatActivity() {
                     resultText.text = ""
                 }
 
-                // ЗАГРУЗКА CSV
                 val url = URL("https://docs.google.com/spreadsheets/d/$SPREADSHEET_ID/export?format=csv")
                 val connection = url.openConnection()
                 connection.connectTimeout = 15000
@@ -240,7 +294,6 @@ class MainActivity : AppCompatActivity() {
                     statusText.text = "Ищем $number..."
                 }
 
-                // ПОИСК
                 val lines = csvText.lines()
                 var foundRow = -1
                 var foundFullValue = ""
@@ -264,7 +317,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // ЕСЛИ НАШЛИ - ОТМЕЧАЕМ В ТАБЛИЦЕ
                 if (foundRow != -1) {
                     markRowInSheet(foundRow)
                 }
@@ -327,18 +379,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ФУНКЦИЯ ОТМЕТКИ СТРОКИ ЧЕРЕЗ APPS SCRIPT
     private fun markRowInSheet(rowIndex: Int) {
         try {
-            // Используем Apps Script для записи в таблицу
-            // Нужно развернуть этот скрипт: https://script.google.com/d/1LhQjVkqX6x9LxPEpRqXkLxVpLxQxVxPx/edit
             val scriptUrl = "https://script.google.com/macros/s/AKfycbwEKKeHgscW830Fh11paF8tUdaGrq2NpHD_Ol2pblhChLm-4WG06-t6bRBMQZROP3mQHQ/exec"
             val url = URL("$scriptUrl?row=$rowIndex&value=${URLEncoder.encode("Есть", "UTF-8")}")
             val connection = url.openConnection()
             connection.connectTimeout = 5000
             connection.getInputStream().close()
         } catch (e: Exception) {
-            // Если скрипт не настроен, хотя бы покажем в логе
             println("Ошибка отметки: ${e.message}")
         }
     }
@@ -355,7 +403,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -366,10 +413,16 @@ class MainActivity : AppCompatActivity() {
             REQUEST_RECORD_AUDIO_PERMISSION -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     statusText.text = "Доступ к микрофону разрешён"
+                    initSpeechRecognizer()
                 } else {
                     statusText.text = "Без микрофона голосовой ввод не работает"
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        speechRecognizer?.destroy()
     }
 }

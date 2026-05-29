@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Voice search</string>
+    <string name="app_name">VoiceSearch</string>
+
+    <!-- Home empty state -->
+    <string name="home_empty_title">Нет ни одной таблицы</string>
+    <string name="home_empty_subtitle">Добавьте первую, чтобы начать поиск</string>
+    <string name="home_empty_cta">Добавить таблицу</string>
+
+    <!-- Home with table -->
+    <string name="home_press_to_record">Зажмите и говорите</string>
+    <string name="home_no_table_selected">Таблица не выбрана</string>
+    <string name="cd_mic">Микрофон поиска</string>
+    <string name="cd_add_table">Добавить таблицу</string>
 </resources>

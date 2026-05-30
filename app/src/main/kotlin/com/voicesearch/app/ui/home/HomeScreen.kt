@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,6 +31,7 @@ import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -44,8 +49,12 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -100,25 +109,40 @@ fun HomeScreen(
         onAddTable = onAddTable,
         onOpenMenu = onOpenMenu,
         state = state,
-        onMicPress = ::onMicPress,
-        onMicRelease = viewModel::releaseMic,
-        onSheetDismiss = viewModel::consumeOutcome,
-        onApplySelection = viewModel::applyMultipleSelection,
+        callbacks = HomeScreenCallbacks(
+            onMicPress = ::onMicPress,
+            onMicRelease = viewModel::releaseMic,
+            onSheetDismiss = viewModel::consumeOutcome,
+            onApplySelection = viewModel::applyMultipleSelection,
+            onToggleManualInput = viewModel::toggleManualInput,
+            onManualInputChange = viewModel::onManualInputChange,
+            onManualInputSubmit = viewModel::submitManualSearch,
+            onManualInputDismiss = viewModel::dismissManualInput,
+        ),
         snackbar = snackbar,
     )
 }
 
-@Suppress("LongParameterList") // Compose entry-point; all params are screen-level callbacks/state.
+/** Bundle of screen-level callbacks; lets HomeScreenContent stay under detekt's parameter cap. */
+data class HomeScreenCallbacks(
+    val onMicPress: () -> Unit = {},
+    val onMicRelease: () -> Unit = {},
+    val onSheetDismiss: () -> Unit = {},
+    val onApplySelection: (Collection<Long>) -> Unit = {},
+    val onToggleManualInput: () -> Unit = {},
+    val onManualInputChange: (String) -> Unit = {},
+    val onManualInputSubmit: () -> Unit = {},
+    val onManualInputDismiss: () -> Unit = {},
+)
+
+@Suppress("LongMethod") // Compose entry-point that wires Scaffold + FAB overlays + sheet.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreenContent(
     onAddTable: () -> Unit,
     onOpenMenu: () -> Unit,
     state: HomeUiState,
-    onMicPress: () -> Unit = {},
-    onMicRelease: () -> Unit = {},
-    onSheetDismiss: () -> Unit = {},
-    onApplySelection: (Collection<Long>) -> Unit = {},
+    callbacks: HomeScreenCallbacks = HomeScreenCallbacks(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(
@@ -142,8 +166,51 @@ private fun HomeScreenContent(
                 )
             }
         },
-        floatingActionButton = {
+        snackbarHost = { SnackbarHost(snackbar) },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Manual-input strip lives at the top so the system keyboard
+                // animating in doesn't shove other content around.
+                if (state is HomeUiState.Active && state.manualInput.isVisible) {
+                    ManualSearchBar(
+                        text = state.manualInput.text,
+                        onTextChange = callbacks.onManualInputChange,
+                        onSubmit = callbacks.onManualInputSubmit,
+                        onDismiss = callbacks.onManualInputDismiss,
+                    )
+                }
+
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    when (state) {
+                        HomeUiState.Empty -> EmptyState(onAddTable = onAddTable)
+                        is HomeUiState.Active -> ActiveState(
+                            state = state,
+                            onMicPress = callbacks.onMicPress,
+                            onMicRelease = callbacks.onMicRelease,
+                        )
+                    }
+                }
+            }
+
+            // Two FABs as overlays. Scaffold's slot only supports one, so we
+            // place both manually: keyboard fallback on the left, add-table on the right.
             if (state is HomeUiState.Active) {
+                FloatingActionButton(
+                    onClick = callbacks.onToggleManualInput,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = CircleShape,
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = LocalElevation.current.high,
+                        pressedElevation = LocalElevation.current.low,
+                    ),
+                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                ) {
+                    Icon(Icons.Outlined.Keyboard, contentDescription = "Поиск с клавиатуры")
+                }
+
                 FloatingActionButton(
                     onClick = onAddTable,
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -153,27 +220,10 @@ private fun HomeScreenContent(
                         defaultElevation = LocalElevation.current.high,
                         pressedElevation = LocalElevation.current.low,
                     ),
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Добавить таблицу")
                 }
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-        containerColor = MaterialTheme.colorScheme.background,
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentAlignment = Alignment.Center,
-        ) {
-            when (state) {
-                HomeUiState.Empty -> EmptyState(onAddTable = onAddTable)
-                is HomeUiState.Active -> ActiveState(
-                    state = state,
-                    onMicPress = onMicPress,
-                    onMicRelease = onMicRelease,
-                )
             }
         }
 
@@ -181,9 +231,64 @@ private fun HomeScreenContent(
         if (outcome is SearchOutcome.MultipleCandidates) {
             MultipleMatchesSheet(
                 outcome = outcome,
-                onDismiss = onSheetDismiss,
-                onApply = onApplySelection,
+                onDismiss = callbacks.onSheetDismiss,
+                onApply = callbacks.onApplySelection,
             )
+        }
+    }
+}
+
+@Composable
+private fun ManualSearchBar(
+    text: String,
+    onTextChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = LocalElevation.current.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = onTextChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester),
+                placeholder = { Text("Введите значение для поиска") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    onSubmit()
+                    keyboard?.hide()
+                }),
+                trailingIcon = {
+                    if (text.isNotEmpty()) {
+                        IconButton(onClick = { onTextChange("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Очистить")
+                        }
+                    }
+                },
+            )
+            Spacer(Modifier.size(8.dp))
+            IconButton(onClick = {
+                keyboard?.hide()
+                onDismiss()
+            }) {
+                Icon(Icons.Default.Close, contentDescription = "Закрыть поиск")
+            }
         }
     }
 }
@@ -364,6 +469,7 @@ private fun HomeScreenWithTablePreview() {
                 tableId = "t1",
                 hint = PromptHint.FixedSuffix(5),
                 mic = MicState.Idle,
+                manualInput = ManualInputState(),
                 lastOutcome = null,
             ),
         )

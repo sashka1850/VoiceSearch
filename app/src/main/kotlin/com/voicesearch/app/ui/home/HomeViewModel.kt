@@ -56,14 +56,16 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), initialValue = null)
 
     private val micState = MutableStateFlow(MicState.Idle)
+    private val manualInputState = MutableStateFlow(ManualInputState())
     private val lastOutcome = MutableStateFlow<SearchOutcome?>(null)
 
     val state: StateFlow<HomeUiState> = combine(
         activeTable,
         activeSettings,
         micState,
+        manualInputState,
         lastOutcome,
-    ) { table, settings, mic, outcome ->
+    ) { table, settings, mic, manual, outcome ->
         if (table == null) {
             HomeUiState.Empty
         } else {
@@ -73,6 +75,7 @@ class HomeViewModel @Inject constructor(
                 hint = if (settings == null) PromptHint.NotConfigured
                 else PromptHint.fromPrefix(settings.prefix),
                 mic = mic,
+                manualInput = manual,
                 lastOutcome = outcome,
             )
         }
@@ -109,6 +112,34 @@ class HomeViewModel @Inject constructor(
         lastOutcome.value = null
     }
 
+    // region Manual (keyboard) input — same search pipeline, different trigger.
+
+    fun toggleManualInput() {
+        manualInputState.update { it.copy(isVisible = !it.isVisible) }
+    }
+
+    fun onManualInputChange(text: String) {
+        manualInputState.update { it.copy(text = text) }
+    }
+
+    fun submitManualSearch() {
+        val draft = manualInputState.value.text.trim()
+        if (draft.isEmpty()) return
+        // Mic must be idle — otherwise we'd cross the streams (literally).
+        if (micState.value != MicState.Idle) return
+        manualInputState.update { it.copy(isSearching = true) }
+        viewModelScope.launch {
+            runSearch(draft)
+            manualInputState.update { it.copy(isSearching = false, text = "") }
+        }
+    }
+
+    fun dismissManualInput() {
+        manualInputState.value = ManualInputState()
+    }
+
+    // endregion
+
     /** User confirmed a subset of rows from the multi-match sheet. */
     fun applyMultipleSelection(rowIds: Collection<Long>) {
         if (rowIds.isEmpty()) {
@@ -123,7 +154,7 @@ class HomeViewModel @Inject constructor(
 
     private fun handleSpeechEvent(event: SpeechEvent) {
         when (event) {
-            is SpeechEvent.Final -> runSearch(event.text)
+            is SpeechEvent.Final -> viewModelScope.launch { runSearch(event.text) }
             is SpeechEvent.Error -> {
                 micState.value = MicState.Idle
                 lastOutcome.value = SearchOutcome.Failed(event.reason.userMessage())
@@ -134,7 +165,8 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun runSearch(spokenText: String) {
+    /** Shared by both voice (final transcript) and keyboard (typed query). */
+    private suspend fun runSearch(queryText: String) {
         val table = activeTable.value
         val settings = activeSettings.value
         if (table == null || settings == null) {
@@ -142,26 +174,24 @@ class HomeViewModel @Inject constructor(
             lastOutcome.value = SearchOutcome.NeedsSettings
             return
         }
-        viewModelScope.launch {
-            val rows = tableRepository.getRows(table.id)
-            val matches = SearchMatcher.findMatches(rows, settings, spokenText)
-            lastOutcome.value = when (matches.size) {
-                0 -> SearchOutcome.NotFound(spokenText)
-                1 -> {
-                    val match = matches.first()
-                    tableRepository.setRowMarked(match.id, marked = true, markedAt = clock.nowMillis())
-                    SearchOutcome.Marked(
-                        cellValue = match.cells.getOrNull(settings.searchColumnIndex).orEmpty(),
-                        name = match.cells.getOrNull(settings.nameColumnIndex),
-                    )
-                }
-                else -> SearchOutcome.MultipleCandidates(
-                    candidates = matches.map { it.toCandidate(settings.searchColumnIndex, settings.nameColumnIndex) },
-                    spokenText = spokenText,
+        val rows = tableRepository.getRows(table.id)
+        val matches = SearchMatcher.findMatches(rows, settings, queryText)
+        lastOutcome.value = when (matches.size) {
+            0 -> SearchOutcome.NotFound(queryText)
+            1 -> {
+                val match = matches.first()
+                tableRepository.setRowMarked(match.id, marked = true, markedAt = clock.nowMillis())
+                SearchOutcome.Marked(
+                    cellValue = match.cells.getOrNull(settings.searchColumnIndex).orEmpty(),
+                    name = match.cells.getOrNull(settings.nameColumnIndex),
                 )
             }
-            micState.value = MicState.Idle
+            else -> SearchOutcome.MultipleCandidates(
+                candidates = matches.map { it.toCandidate(settings.searchColumnIndex, settings.nameColumnIndex) },
+                spokenText = queryText,
+            )
         }
+        micState.value = MicState.Idle
     }
 
     override fun onCleared() {

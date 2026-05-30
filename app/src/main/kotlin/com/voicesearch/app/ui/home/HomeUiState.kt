@@ -11,9 +11,20 @@ sealed interface HomeUiState {
         val tableId: String,
         val hint: PromptHint,
         val mic: MicState,
+        val manualInput: ManualInputState,
         val lastOutcome: SearchOutcome?,
     ) : HomeUiState
 }
+
+/**
+ * Keyboard-fallback input. Hidden by default; users summon it from the
+ * second FAB when voice isn't an option (noisy, offline, etc.).
+ */
+data class ManualInputState(
+    val isVisible: Boolean = false,
+    val text: String = "",
+    val isSearching: Boolean = false,
+)
 
 enum class MicState { Idle, Listening, Processing }
 

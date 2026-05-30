@@ -1,10 +1,78 @@
 package com.voicesearch.app.ui.home
 
-/**
- * State surface for [HomeScreen]. Stage 4 introduces the real listening/result
- * states; for now we only model "no tables yet" vs "table picked".
- */
+import com.voicesearch.core.domain.model.PrefixHint
+import com.voicesearch.core.domain.repository.TableRow
+
 sealed interface HomeUiState {
     data object Empty : HomeUiState
-    data class WithTable(val tableName: String) : HomeUiState
+
+    data class Active(
+        val tableName: String,
+        val tableId: String,
+        val hint: PromptHint,
+        val mic: MicState,
+        val lastOutcome: SearchOutcome?,
+    ) : HomeUiState
 }
+
+enum class MicState { Idle, Listening, Processing }
+
+sealed interface PromptHint {
+    data class FixedSuffix(val length: Int) : PromptHint
+    data class VariableSuffix(val maxLength: Int) : PromptHint
+    data object FullValue : PromptHint
+    data object NotConfigured : PromptHint
+
+    fun toDisplayString(): String = when (this) {
+        is FixedSuffix -> "Назовите последние $length"
+        is VariableSuffix -> "Назовите последние до $maxLength"
+        FullValue -> "Назовите значение"
+        NotConfigured -> "Откройте меню → «Настройки таблицы»"
+    }
+
+    companion object {
+        fun fromPrefix(hint: PrefixHint?): PromptHint = when (hint) {
+            is PrefixHint.FixedSuffix -> FixedSuffix(hint.suffixLength)
+            is PrefixHint.VariableSuffix -> VariableSuffix(hint.maxSuffixLength)
+            PrefixHint.FullMatch -> FullValue
+            null -> FullValue
+        }
+    }
+}
+
+/**
+ * One-shot outcome surfaced briefly after a search. The UI consumes it after
+ * showing a toast / sheet so the next mic press starts from a clean slate.
+ */
+sealed interface SearchOutcome {
+    /** Auto-marked a single row. */
+    data class Marked(val cellValue: String, val name: String?) : SearchOutcome
+
+    data class NotFound(val spokenText: String) : SearchOutcome
+
+    /** Multiple rows matched — user picks which to mark via [HomeViewModel.applyMultipleSelection]. */
+    data class MultipleCandidates(
+        val candidates: List<Candidate>,
+        val spokenText: String,
+    ) : SearchOutcome
+
+    data class Failed(val message: String) : SearchOutcome
+
+    /** Settings are missing — point the user at the config screen. */
+    data object NeedsSettings : SearchOutcome
+}
+
+data class Candidate(
+    val rowId: Long,
+    val cellValue: String,
+    val name: String?,
+    val isAlreadyMarked: Boolean,
+)
+
+/** Convenience to convert from domain row + settings. */
+internal fun TableRow.toCandidate(searchCol: Int, nameCol: Int): Candidate = Candidate(
+    rowId = id,
+    cellValue = cells.getOrNull(searchCol).orEmpty(),
+    name = cells.getOrNull(nameCol),
+    isAlreadyMarked = isMarked,
+)

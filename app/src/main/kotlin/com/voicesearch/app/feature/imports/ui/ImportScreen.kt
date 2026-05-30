@@ -142,9 +142,10 @@ private fun YandexLinkCard(
     onImport: () -> Unit,
     isLoading: Boolean,
 ) {
-    SourceCard(icon = Icons.Outlined.Link, title = "Ссылка с Яндекс.Диска") {
+    SourceCard(icon = Icons.Outlined.Link, title = "Ссылка из Яндекс.Документов или Диска") {
         Text(
-            text = "Вставьте публичную ссылку. Файл скачается и сохранится в приложении.",
+            text = "Откройте таблицу → «Поделиться» → «Доступ по ссылке» → вставьте сюда. " +
+                "Файл скачается и сохранится в приложении.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

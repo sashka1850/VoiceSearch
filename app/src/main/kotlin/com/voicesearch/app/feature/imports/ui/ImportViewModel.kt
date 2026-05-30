@@ -38,7 +38,19 @@ class ImportViewModel @Inject constructor(
             _state.value = ImportUiState.Error("Ссылка должна начинаться с https://")
             return
         }
-        runImport(label = "Скачиваем с Яндекс.Диска…", source = ImportTableUseCase.Source.YandexPublicLink(link))
+        if (link.contains("docs.yandex.", ignoreCase = true)) {
+            // The URL the editor shows in the address bar isn't a shareable
+            // link — the Disk API rejects it. Steer the user to the right one.
+            _state.value = ImportUiState.Error(
+                "Это ссылка редактора. В Документах нажмите «Поделиться» → " +
+                    "«Доступ по ссылке» и вставьте полученный disk.yandex.ru-адрес.",
+            )
+            return
+        }
+        runImport(
+            label = "Скачиваем с Яндекс.Диска…",
+            source = ImportTableUseCase.Source.YandexPublicLink(link),
+        )
     }
 
     fun consumeError() {

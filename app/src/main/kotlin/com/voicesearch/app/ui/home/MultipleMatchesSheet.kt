@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,10 +28,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voicesearch.core.ui.components.PrimaryButton
 
+@Suppress("LongMethod") // Single-screen sheet that wires header, list and action row.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MultipleMatchesSheet(
@@ -43,6 +46,11 @@ fun MultipleMatchesSheet(
         mutableStateOf<Set<Long>>(emptySet())
     }
     val allSelected = selectedIds.size == outcome.candidates.size && outcome.candidates.isNotEmpty()
+
+    // Cap the candidate list at ~half the screen so the action row at the bottom
+    // never gets pushed off-screen. The list itself scrolls within that band.
+    val configuration = LocalConfiguration.current
+    val maxListHeight = (configuration.screenHeightDp * LIST_MAX_FRACTION_OF_SCREEN).dp
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -83,7 +91,11 @@ fun MultipleMatchesSheet(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            LazyColumn(modifier = Modifier.heightIn()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxListHeight),
+            ) {
                 items(items = outcome.candidates, key = { it.rowId }) { candidate ->
                     CandidateRow(
                         candidate = candidate,
@@ -165,5 +177,4 @@ private fun CandidateRow(candidate: Candidate, checked: Boolean, onToggle: (Bool
     }
 }
 
-// Local helper so the import block stays small.
-private fun Modifier.heightIn(): Modifier = this
+private const val LIST_MAX_FRACTION_OF_SCREEN = 0.5f

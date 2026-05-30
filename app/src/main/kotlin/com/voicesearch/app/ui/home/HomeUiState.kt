@@ -13,6 +13,7 @@ sealed interface HomeUiState {
         val mic: MicState,
         val manualInput: ManualInputState,
         val lastOutcome: SearchOutcome?,
+        val yandexAuthenticated: Boolean = false,
     ) : HomeUiState
 }
 

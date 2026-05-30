@@ -11,3 +11,12 @@ interface FileDownloader {
      */
     suspend fun download(url: String): ByteArray
 }
+
+/**
+ * Symmetric to [FileDownloader] for PUT-style uploads.
+ * Yandex.Disk's two-step upload flow asks us to PUT raw bytes to a
+ * pre-signed URL returned by `getUploadHref`.
+ */
+interface FileUploader {
+    suspend fun upload(url: String, bytes: ByteArray, contentType: String)
+}

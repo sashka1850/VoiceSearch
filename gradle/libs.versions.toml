@@ -9,6 +9,7 @@ coreKtx = "1.13.1"
 appcompat = "1.7.0"
 activityCompose = "1.9.3"
 lifecycle = "2.8.7"
+browser = "1.8.0"
 
 # Compose
 composeBom = "2024.12.01"
@@ -63,6 +64,7 @@ detekt = "1.23.8"
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 
 # Lifecycle
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }

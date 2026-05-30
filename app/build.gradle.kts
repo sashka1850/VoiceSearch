@@ -116,6 +116,9 @@ dependencies {
     // Navigation
     implementation(libs.androidx.navigation.compose)
 
+    // Custom Tabs — Yandex OAuth runs in the user's browser via this API.
+    implementation(libs.androidx.browser)
+
     // Hilt
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)

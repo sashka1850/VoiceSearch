@@ -2,7 +2,9 @@ package com.voicesearch.core.network.di
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.voicesearch.core.domain.network.FileDownloader
+import com.voicesearch.core.domain.network.FileUploader
 import com.voicesearch.core.network.http.OkHttpFileDownloader
+import com.voicesearch.core.network.http.OkHttpFileUploader
 import com.voicesearch.core.network.yandex.YandexDiskApi
 import com.voicesearch.core.network.yandex.YandexOAuthApi
 import dagger.Binds
@@ -89,4 +91,8 @@ internal abstract class NetworkBindingsModule {
     @Binds
     @Singleton
     abstract fun bindFileDownloader(impl: OkHttpFileDownloader): FileDownloader
+
+    @Binds
+    @Singleton
+    abstract fun bindFileUploader(impl: OkHttpFileUploader): FileUploader
 }

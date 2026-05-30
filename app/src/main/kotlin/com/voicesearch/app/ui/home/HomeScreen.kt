@@ -18,9 +18,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
@@ -139,6 +142,9 @@ fun HomeScreen(
             onManualInputSubmit = viewModel::submitManualSearch,
             onManualInputDismiss = viewModel::dismissManualInput,
             onShare = viewModel::shareCurrentTable,
+            onConnectYandex = viewModel::connectYandex,
+            onSyncNow = viewModel::syncNow,
+            onSignOutYandex = viewModel::signOutYandex,
         ),
         snackbar = snackbar,
     )
@@ -155,6 +161,9 @@ data class HomeScreenCallbacks(
     val onManualInputSubmit: () -> Unit = {},
     val onManualInputDismiss: () -> Unit = {},
     val onShare: () -> Unit = {},
+    val onConnectYandex: () -> Unit = {},
+    val onSyncNow: () -> Unit = {},
+    val onSignOutYandex: () -> Unit = {},
 )
 
 @Suppress("LongMethod") // Compose entry-point that wires Scaffold + FAB overlays + sheet.
@@ -179,8 +188,12 @@ private fun HomeScreenContent(
                     },
                     actions = {
                         TableMenu(
+                            yandexAuthenticated = state.yandexAuthenticated,
                             onShare = callbacks.onShare,
                             onOpenSettings = onOpenSettings,
+                            onConnectYandex = callbacks.onConnectYandex,
+                            onSyncNow = callbacks.onSyncNow,
+                            onSignOutYandex = callbacks.onSignOutYandex,
                         )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -464,7 +477,14 @@ private fun MarkedCard(outcome: SearchOutcome.Marked) {
 }
 
 @Composable
-private fun TableMenu(onShare: () -> Unit, onOpenSettings: () -> Unit) {
+private fun TableMenu(
+    yandexAuthenticated: Boolean,
+    onShare: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onConnectYandex: () -> Unit,
+    onSyncNow: () -> Unit,
+    onSignOutYandex: () -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
@@ -487,6 +507,33 @@ private fun TableMenu(onShare: () -> Unit, onOpenSettings: () -> Unit) {
                     onOpenSettings()
                 },
             )
+            if (yandexAuthenticated) {
+                DropdownMenuItem(
+                    text = { Text("Синхронизировать с Я.Диском") },
+                    leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
+                    onClick = {
+                        open = false
+                        onSyncNow()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Выйти из Я.Диска") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+                    onClick = {
+                        open = false
+                        onSignOutYandex()
+                    },
+                )
+            } else {
+                DropdownMenuItem(
+                    text = { Text("Войти в Я.Диск") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null) },
+                    onClick = {
+                        open = false
+                        onConnectYandex()
+                    },
+                )
+            }
         }
     }
 }
@@ -522,6 +569,7 @@ private fun HomeScreenWithTablePreview() {
                 mic = MicState.Idle,
                 manualInput = ManualInputState(),
                 lastOutcome = null,
+                yandexAuthenticated = false,
             ),
         )
     }

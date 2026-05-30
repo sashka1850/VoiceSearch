@@ -18,11 +18,27 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.VoiceSearch.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              Yandex OAuth redirect lands here. The scheme/host pair is
+              `yandexta://<clientId>/` (Yandex auto-derives from the ClientID),
+              and we set those via manifest placeholders in app/build.gradle.kts
+              so the actual value never lives in source.
+            -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="${yandexRedirectScheme}"
+                    android:host="${yandexRedirectHost}" />
             </intent-filter>
         </activity>
 

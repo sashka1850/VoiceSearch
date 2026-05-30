@@ -2,13 +2,19 @@ package com.voicesearch.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.voicesearch.app.feature.auth.yandex.YandexAuthEvents
+import com.voicesearch.app.feature.auth.yandex.YandexAuthHandler
+import com.voicesearch.app.feature.auth.yandex.YandexAuthLauncher
 import com.voicesearch.app.feature.export.domain.ExportTableUseCase
 import com.voicesearch.app.feature.export.domain.ShareableFile
+import com.voicesearch.app.feature.sync.domain.UploadTableUseCase
 import com.voicesearch.core.domain.model.Table
 import com.voicesearch.core.domain.model.TableSettings
 import com.voicesearch.core.domain.repository.AppPreferencesRepository
 import com.voicesearch.core.domain.repository.TableRepository
 import com.voicesearch.core.domain.repository.TableSettingsRepository
+import com.voicesearch.core.domain.repository.YandexAuthRepository
+import com.voicesearch.core.domain.repository.YandexAuthState
 import com.voicesearch.core.domain.search.SearchMatcher
 import com.voicesearch.core.domain.speech.SpeechError
 import com.voicesearch.core.domain.speech.SpeechEvent
@@ -47,6 +53,11 @@ class HomeViewModel @Inject constructor(
     private val settingsRepository: TableSettingsRepository,
     private val speechEngine: SpeechRecognitionEngine,
     private val exportTableUseCase: ExportTableUseCase,
+    private val uploadTableUseCase: UploadTableUseCase,
+    private val yandexAuthRepository: YandexAuthRepository,
+    private val yandexAuthEvents: YandexAuthEvents,
+    private val yandexAuthHandler: YandexAuthHandler,
+    private val yandexAuthLauncher: YandexAuthLauncher,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -78,13 +89,22 @@ class HomeViewModel @Inject constructor(
     )
     val shareEvents: Flow<ShareableFile> = _shareEvents.receiveAsFlow()
 
+    private val yandexAuth: StateFlow<YandexAuthState> = yandexAuthRepository.authState
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), YandexAuthState.NotAuthenticated)
+
     val state: StateFlow<HomeUiState> = combine(
-        activeTable,
-        activeSettings,
-        micState,
-        manualInputState,
-        lastOutcome,
-    ) { table, settings, mic, manual, outcome ->
+        listOf(activeTable, activeSettings, micState, manualInputState, lastOutcome, yandexAuth),
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val table = values[0] as Table?
+        @Suppress("UNCHECKED_CAST")
+        val settings = values[1] as TableSettings?
+        val mic = values[2] as MicState
+        val manual = values[3] as ManualInputState
+        @Suppress("UNCHECKED_CAST")
+        val outcome = values[4] as SearchOutcome?
+        val auth = values[5] as YandexAuthState
+
         if (table == null) {
             HomeUiState.Empty
         } else {
@@ -96,6 +116,7 @@ class HomeViewModel @Inject constructor(
                 mic = mic,
                 manualInput = manual,
                 lastOutcome = outcome,
+                yandexAuthenticated = auth is YandexAuthState.Authenticated,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HomeUiState.Empty)
@@ -103,6 +124,20 @@ class HomeViewModel @Inject constructor(
     init {
         speechEngine.events
             .onEach(::handleSpeechEvent)
+            .launchIn(viewModelScope)
+
+        // Deep links from the OAuth redirect land here through MainActivity.
+        yandexAuthEvents.codes
+            .onEach { code ->
+                when (val result = yandexAuthHandler.handleAuthCode(code)) {
+                    is YandexAuthHandler.Result.Success -> {
+                        lastOutcome.value = SearchOutcome.Failed("Вход в Яндекс выполнен")
+                    }
+                    is YandexAuthHandler.Result.Failure -> {
+                        lastOutcome.value = SearchOutcome.Failed(result.message)
+                    }
+                }
+            }
             .launchIn(viewModelScope)
     }
 
@@ -171,6 +206,51 @@ class HomeViewModel @Inject constructor(
                 is ExportTableUseCase.Result.Success -> _shareEvents.trySend(outcome.file)
                 is ExportTableUseCase.Result.Failure -> {
                     lastOutcome.value = SearchOutcome.Failed(outcome.message)
+                }
+            }
+        }
+    }
+
+    // endregion
+
+    // region Yandex auth + sync
+
+    fun connectYandex() {
+        when (val result = yandexAuthLauncher.launch()) {
+            YandexAuthLauncher.LaunchResult.Launched -> Unit // wait for redirect
+            YandexAuthLauncher.LaunchResult.MissingConfig -> {
+                lastOutcome.value = SearchOutcome.Failed(
+                    "ClientID не настроен. Добавьте YANDEX_CLIENT_ID в local.properties.",
+                )
+            }
+            is YandexAuthLauncher.LaunchResult.NoBrowser -> {
+                lastOutcome.value = SearchOutcome.Failed(result.message)
+            }
+        }
+    }
+
+    fun signOutYandex() {
+        viewModelScope.launch {
+            yandexAuthRepository.clear()
+            lastOutcome.value = SearchOutcome.Failed("Вышли из Яндекса")
+        }
+    }
+
+    fun syncNow() {
+        val tableId = activeTable.value?.id ?: run {
+            lastOutcome.value = SearchOutcome.Failed("Сначала выберите таблицу")
+            return
+        }
+        viewModelScope.launch {
+            when (val result = uploadTableUseCase.upload(tableId)) {
+                is UploadTableUseCase.Result.Success -> {
+                    lastOutcome.value = SearchOutcome.Failed("Загружено: ${result.targetPath}")
+                }
+                UploadTableUseCase.Result.NotAuthenticated -> {
+                    lastOutcome.value = SearchOutcome.Failed("Сначала войдите в Я.Диск")
+                }
+                is UploadTableUseCase.Result.Failure -> {
+                    lastOutcome.value = SearchOutcome.Failed(result.message)
                 }
             }
         }

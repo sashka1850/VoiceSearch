@@ -30,7 +30,13 @@ class ExportTableUseCase @Inject constructor(
 ) {
 
     sealed interface Result {
-        data class Success(val file: ShareableFile) : Result
+        /** [file] for ACTION_SEND, [artifact] + [mimeType] for direct read (e.g. Yandex upload). */
+        data class Success(
+            val file: ShareableFile,
+            val artifact: File,
+            val mimeType: String,
+        ) : Result
+
         data class Failure(val message: String) : Result
     }
 
@@ -71,11 +77,13 @@ class ExportTableUseCase @Inject constructor(
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, outFile)
         Result.Success(
-            ShareableFile(
+            file = ShareableFile(
                 uri = uri,
                 mimeType = format.mimeType,
                 displayName = outFile.name,
             ),
+            artifact = outFile,
+            mimeType = format.mimeType,
         )
     }
 

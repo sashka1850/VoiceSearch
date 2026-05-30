@@ -44,6 +44,9 @@ desugarJdk = "2.1.4"
 # Logging
 timber = "5.0.1"
 
+# Spreadsheet parsing
+fastexcel = "0.18.4"
+
 # Testing
 junit = "4.13.2"
 mockk = "1.13.13"
@@ -118,6 +121,10 @@ desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", ver
 
 # Logging
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
+
+# Spreadsheet
+fastexcel-reader = { group = "org.dhatim", name = "fastexcel-reader", version.ref = "fastexcel" }
+fastexcel-writer = { group = "org.dhatim", name = "fastexcel", version.ref = "fastexcel" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

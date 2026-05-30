@@ -14,6 +14,8 @@ import com.voicesearch.core.data.db.VoiceSearchDatabase
 import com.voicesearch.core.data.db.dao.TableDao
 import com.voicesearch.core.data.db.dao.TableRowDao
 import com.voicesearch.core.data.db.dao.TableSettingsDao
+import com.voicesearch.core.domain.time.Clock
+import com.voicesearch.core.domain.time.SystemClock
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -84,4 +86,8 @@ object DataModule {
     }
 
     // Json is provided by `:core:network`'s NetworkModule — see VoiceSearchApp's Hilt graph.
+
+    @Provides
+    @Singleton
+    fun provideClock(): Clock = SystemClock
 }

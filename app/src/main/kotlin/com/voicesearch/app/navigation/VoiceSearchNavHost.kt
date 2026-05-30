@@ -5,6 +5,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.voicesearch.app.feature.imports.ui.ImportScreen
 import com.voicesearch.app.ui.home.HomeScreen
 import com.voicesearch.app.ui.placeholder.PlaceholderScreen
 
@@ -32,10 +33,12 @@ fun VoiceSearchNavHost(
             )
         }
         composable(Routes.IMPORT) {
-            PlaceholderScreen(
-                title = "Импорт таблицы",
-                hint = "Появится на Этапе 2",
+            ImportScreen(
                 onBack = { navController.popBackStack() },
+                onImportComplete = {
+                    // Stage 3 will route to a real table settings screen.
+                    navController.popBackStack()
+                },
             )
         }
         composable(Routes.SETTINGS) {

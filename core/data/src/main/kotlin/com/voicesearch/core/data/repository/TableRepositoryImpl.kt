@@ -10,6 +10,7 @@ import com.voicesearch.core.data.mapper.toEntity
 import com.voicesearch.core.domain.model.Table
 import com.voicesearch.core.domain.repository.TableRepository
 import com.voicesearch.core.domain.repository.TableRow
+import com.voicesearch.core.domain.time.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -22,7 +23,7 @@ internal class TableRepositoryImpl @Inject constructor(
     private val tableDao: TableDao,
     private val rowDao: TableRowDao,
     private val json: Json,
-    private val clock: () -> Long = System::currentTimeMillis,
+    private val clock: Clock,
 ) : TableRepository {
 
     override fun observeAll(): Flow<List<Table>> =
@@ -37,7 +38,7 @@ internal class TableRepositoryImpl @Inject constructor(
     override suspend fun save(table: Table, rows: List<List<String>>) {
         val tableEntity = table.toEntity(
             json = json,
-            importedAt = clock(),
+            importedAt = clock.nowMillis(),
             originalFileName = (table.source as? com.voicesearch.core.domain.model.TableSource.LocalFile)?.originalFileName,
         )
         val rowEntities = rows.mapIndexed { index, cells ->

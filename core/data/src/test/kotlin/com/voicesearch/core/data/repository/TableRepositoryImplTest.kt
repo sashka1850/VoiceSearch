@@ -7,6 +7,7 @@ import com.google.common.truth.Truth.assertThat
 import com.voicesearch.core.data.db.VoiceSearchDatabase
 import com.voicesearch.core.domain.model.Table
 import com.voicesearch.core.domain.model.TableSource
+import com.voicesearch.core.domain.time.Clock
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
@@ -40,7 +41,7 @@ class TableRepositoryImplTest {
             tableDao = db.tableDao(),
             rowDao = db.tableRowDao(),
             json = json,
-            clock = { fixedClock },
+            clock = Clock { fixedClock },
         )
     }
 

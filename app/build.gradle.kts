@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,16 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+
+// Yandex OAuth credentials live in local.properties (gitignored).
+// CI / fresh clones get empty strings — the OAuth screen will show a
+// friendly "не настроен" instead of crashing.
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val yandexClientId: String = localProps.getProperty("YANDEX_CLIENT_ID", "")
+val yandexClientSecret: String = localProps.getProperty("YANDEX_CLIENT_SECRET", "")
 
 android {
     namespace = "com.voicesearch.app"
@@ -20,6 +32,20 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        buildConfigField("String", "YANDEX_CLIENT_ID", "\"$yandexClientId\"")
+        buildConfigField("String", "YANDEX_CLIENT_SECRET", "\"$yandexClientSecret\"")
+        // Yandex auto-derives redirect URI from the ClientID: yandexta://<clientId>/
+        buildConfigField(
+            "String",
+            "YANDEX_REDIRECT_URI",
+            "\"yandexta://$yandexClientId/\"",
+        )
+
+        // Used by AndroidManifest's intent-filter so deep links match the same URI
+        // we registered with Yandex without duplicating the value.
+        manifestPlaceholders["yandexRedirectScheme"] = "yandexta"
+        manifestPlaceholders["yandexRedirectHost"] = yandexClientId
     }
 
     buildTypes {
@@ -57,6 +83,8 @@ android {
             "/META-INF/{AL2.0,LGPL2.1}",
             "/META-INF/LICENSE*",
             "/META-INF/NOTICE*",
+            // fastexcel-reader pulls in legacy maven metadata; ignore so dexer doesn't choke.
+            "META-INF/maven/**",
         )
     }
 }

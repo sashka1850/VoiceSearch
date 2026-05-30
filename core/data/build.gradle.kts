@@ -56,6 +56,11 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
 
+    // No 3rd-party XLSX reader: we open the .xlsx ZIP and parse the
+    // XML parts directly with android.util.Xml. Keeps the apk lean
+    // and avoids the API-mismatch issues fastexcel-reader had with
+    // Kotlin 2.0 + AGP 8.13 stream desugaring.
+
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

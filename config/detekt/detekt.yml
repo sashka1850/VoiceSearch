@@ -11,6 +11,14 @@ complexity:
     thresholdInClasses: 20
     thresholdInFiles: 25
     thresholdInObjects: 20
+  CyclomaticComplexMethod:
+    threshold: 30           # State-machine parsers naturally have many branches
+  NestedBlockDepth:
+    threshold: 6
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false           # Parsers and IO wrappers intentionally rewrap any error
 
 style:
   MagicNumber:

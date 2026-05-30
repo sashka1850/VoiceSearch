@@ -25,6 +25,19 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+}
+
+// Export Room schemas to module/schemas/. Committed to git so future
+// migrations have an authoritative source of truth for diffing.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.generateKotlin", "true")
 }
 
 dependencies {
@@ -53,12 +66,13 @@ dependencies {
     // Desugaring
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
-    // Test
+    // JVM-side tests (Robolectric runs Room in-memory; faster than instrumented).
     testImplementation(libs.junit)
     testImplementation(libs.truth)
     testImplementation(libs.mockk.core)
     testImplementation(libs.kotlinx.coroutines.test)
-
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.room.testing)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.room.testing)
 }

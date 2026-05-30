@@ -2,12 +2,14 @@ package com.voicesearch.app.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.voicesearch.app.feature.imports.ui.ImportScreen
+import com.voicesearch.app.feature.tablesettings.ui.TableSettingsScreen
 import com.voicesearch.app.ui.home.HomeScreen
-import com.voicesearch.app.ui.placeholder.PlaceholderScreen
 
 /**
  * Top-level navigation graph.
@@ -35,17 +37,23 @@ fun VoiceSearchNavHost(
         composable(Routes.IMPORT) {
             ImportScreen(
                 onBack = { navController.popBackStack() },
-                onImportComplete = {
-                    // Stage 3 will route to a real table settings screen.
-                    navController.popBackStack()
+                onImportComplete = { tableId ->
+                    // Drop Import off the back stack so back-from-Settings goes Home, not Import.
+                    navController.navigate(Routes.settings(tableId)) {
+                        popUpTo(Routes.HOME)
+                    }
                 },
             )
         }
-        composable(Routes.SETTINGS) {
-            PlaceholderScreen(
-                title = "Настройки таблицы",
-                hint = "Появится на Этапе 3",
+        composable(
+            route = Routes.SETTINGS_PATTERN,
+            arguments = listOf(navArgument(Routes.ARG_TABLE_ID) { type = NavType.StringType }),
+        ) {
+            TableSettingsScreen(
                 onBack = { navController.popBackStack() },
+                onSaved = {
+                    navController.popBackStack(route = Routes.HOME, inclusive = false)
+                },
             )
         }
     }

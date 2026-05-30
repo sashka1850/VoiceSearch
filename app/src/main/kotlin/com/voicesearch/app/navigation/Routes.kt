@@ -7,5 +7,9 @@ package com.voicesearch.app.navigation
 internal object Routes {
     const val HOME = "home"
     const val IMPORT = "import"
-    const val SETTINGS = "settings"
+    /** Per-table search configuration. tableId carried as a path arg. */
+    const val SETTINGS_PATTERN = "settings/{tableId}"
+    const val ARG_TABLE_ID = "tableId"
+
+    fun settings(tableId: String): String = "settings/$tableId"
 }

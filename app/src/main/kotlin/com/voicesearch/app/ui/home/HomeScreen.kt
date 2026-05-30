@@ -27,11 +27,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voicesearch.core.ui.components.ActionFab
 import com.voicesearch.core.ui.components.PrimaryButton
 import com.voicesearch.core.ui.theme.LocalElevation
@@ -52,7 +55,22 @@ import com.voicesearch.core.ui.theme.VoiceSearchTheme
 fun HomeScreen(
     onAddTable: () -> Unit,
     onOpenMenu: () -> Unit,
-    state: HomeUiState = HomeUiState.Empty,
+    viewModel: HomeViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    HomeScreenContent(
+        onAddTable = onAddTable,
+        onOpenMenu = onOpenMenu,
+        state = state,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeScreenContent(
+    onAddTable: () -> Unit,
+    onOpenMenu: () -> Unit,
+    state: HomeUiState,
 ) {
     Scaffold(
         topBar = {
@@ -191,7 +209,7 @@ private fun stringResourceOrNull(value: String): String = value
 @Composable
 private fun HomeScreenEmptyPreview() {
     VoiceSearchTheme {
-        HomeScreen(onAddTable = {}, onOpenMenu = {}, state = HomeUiState.Empty)
+        HomeScreenContent(onAddTable = {}, onOpenMenu = {}, state = HomeUiState.Empty)
     }
 }
 
@@ -200,7 +218,7 @@ private fun HomeScreenEmptyPreview() {
 @Composable
 private fun HomeScreenWithTablePreview() {
     VoiceSearchTheme {
-        HomeScreen(
+        HomeScreenContent(
             onAddTable = {},
             onOpenMenu = {},
             state = HomeUiState.WithTable("Прайс поставщика"),

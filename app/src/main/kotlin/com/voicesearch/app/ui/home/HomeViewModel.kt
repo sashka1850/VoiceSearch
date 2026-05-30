@@ -2,6 +2,8 @@ package com.voicesearch.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.voicesearch.app.feature.export.domain.ExportTableUseCase
+import com.voicesearch.app.feature.export.domain.ShareableFile
 import com.voicesearch.core.domain.model.Table
 import com.voicesearch.core.domain.model.TableSettings
 import com.voicesearch.core.domain.repository.AppPreferencesRepository
@@ -14,6 +16,9 @@ import com.voicesearch.core.domain.speech.SpeechRecognitionEngine
 import com.voicesearch.core.domain.time.Clock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +27,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,6 +38,7 @@ import javax.inject.Inject
  * engine while the user holds the mic, and resolves the spoken text against
  * the table's search column.
  */
+@Suppress("LongParameterList") // Wiring-time ViewModel; each dep is a real collaborator.
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -39,6 +46,7 @@ class HomeViewModel @Inject constructor(
     private val tableRepository: TableRepository,
     private val settingsRepository: TableSettingsRepository,
     private val speechEngine: SpeechRecognitionEngine,
+    private val exportTableUseCase: ExportTableUseCase,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -58,6 +66,17 @@ class HomeViewModel @Inject constructor(
     private val micState = MutableStateFlow(MicState.Idle)
     private val manualInputState = MutableStateFlow(ManualInputState())
     private val lastOutcome = MutableStateFlow<SearchOutcome?>(null)
+
+    /**
+     * One-shot side-effect channel for the share intent. UI collects via [shareEvents].
+     * Buffered so a rapid "press → press" doesn't drop a request while the previous
+     * chooser is still opening.
+     */
+    private val _shareEvents = Channel<ShareableFile>(
+        capacity = Channel.BUFFERED,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val shareEvents: Flow<ShareableFile> = _shareEvents.receiveAsFlow()
 
     val state: StateFlow<HomeUiState> = combine(
         activeTable,
@@ -136,6 +155,25 @@ class HomeViewModel @Inject constructor(
 
     fun dismissManualInput() {
         manualInputState.value = ManualInputState()
+    }
+
+    // endregion
+
+    // region Export / share
+
+    fun shareCurrentTable() {
+        val tableId = activeTable.value?.id ?: run {
+            lastOutcome.value = SearchOutcome.Failed("Сначала выберите таблицу")
+            return
+        }
+        viewModelScope.launch {
+            when (val outcome = exportTableUseCase.export(tableId)) {
+                is ExportTableUseCase.Result.Success -> _shareEvents.trySend(outcome.file)
+                is ExportTableUseCase.Result.Failure -> {
+                    lastOutcome.value = SearchOutcome.Failed(outcome.message)
+                }
+            }
+        }
     }
 
     // endregion

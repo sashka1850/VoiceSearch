@@ -31,7 +31,7 @@ fun VoiceSearchNavHost(
         composable(Routes.HOME) {
             HomeScreen(
                 onAddTable = { navController.navigate(Routes.IMPORT) },
-                onOpenMenu = { /* stage 6 */ },
+                onOpenSettings = { tableId -> navController.navigate(Routes.settings(tableId)) },
             )
         }
         composable(Routes.IMPORT) {

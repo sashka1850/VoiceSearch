@@ -1,6 +1,7 @@
 package com.voicesearch.app.ui.home
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,9 +23,13 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -70,13 +75,26 @@ import com.voicesearch.core.ui.theme.VoiceSearchTheme
 @Composable
 fun HomeScreen(
     onAddTable: () -> Unit,
-    onOpenMenu: () -> Unit,
+    onOpenSettings: (tableId: String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     var pendingMicPress by remember { mutableStateOf(false) }
+
+    // ACTION_SEND chooser — UI consumes one-shot events from the ViewModel.
+    LaunchedEffect(Unit) {
+        viewModel.shareEvents.collect { shareable ->
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = shareable.mimeType
+                putExtra(Intent.EXTRA_STREAM, shareable.uri)
+                putExtra(Intent.EXTRA_SUBJECT, shareable.displayName)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(intent, "Отправить таблицу"))
+        }
+    }
 
     val micPermission = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -105,9 +123,11 @@ fun HomeScreen(
         }
     }
 
+    val activeTableId = (state as? HomeUiState.Active)?.tableId
+
     HomeScreenContent(
         onAddTable = onAddTable,
-        onOpenMenu = onOpenMenu,
+        onOpenSettings = { activeTableId?.let(onOpenSettings) },
         state = state,
         callbacks = HomeScreenCallbacks(
             onMicPress = ::onMicPress,
@@ -118,6 +138,7 @@ fun HomeScreen(
             onManualInputChange = viewModel::onManualInputChange,
             onManualInputSubmit = viewModel::submitManualSearch,
             onManualInputDismiss = viewModel::dismissManualInput,
+            onShare = viewModel::shareCurrentTable,
         ),
         snackbar = snackbar,
     )
@@ -133,6 +154,7 @@ data class HomeScreenCallbacks(
     val onManualInputChange: (String) -> Unit = {},
     val onManualInputSubmit: () -> Unit = {},
     val onManualInputDismiss: () -> Unit = {},
+    val onShare: () -> Unit = {},
 )
 
 @Suppress("LongMethod") // Compose entry-point that wires Scaffold + FAB overlays + sheet.
@@ -140,7 +162,7 @@ data class HomeScreenCallbacks(
 @Composable
 private fun HomeScreenContent(
     onAddTable: () -> Unit,
-    onOpenMenu: () -> Unit,
+    onOpenSettings: () -> Unit,
     state: HomeUiState,
     callbacks: HomeScreenCallbacks = HomeScreenCallbacks(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
@@ -156,9 +178,10 @@ private fun HomeScreenContent(
                         )
                     },
                     actions = {
-                        IconButton(onClick = onOpenMenu) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Меню")
-                        }
+                        TableMenu(
+                            onShare = callbacks.onShare,
+                            onOpenSettings = onOpenSettings,
+                        )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
@@ -440,6 +463,34 @@ private fun MarkedCard(outcome: SearchOutcome.Marked) {
     }
 }
 
+@Composable
+private fun TableMenu(onShare: () -> Unit, onOpenSettings: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "Меню")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Поделиться файлом") },
+                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onShare()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Настройки таблицы") },
+                leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onOpenSettings()
+                },
+            )
+        }
+    }
+}
+
 internal fun HomeUiState.snackMessage(): String? = when (val outcome = (this as? HomeUiState.Active)?.lastOutcome) {
     is SearchOutcome.NotFound -> "Не нашли: ${outcome.spokenText}"
     is SearchOutcome.Failed -> outcome.message
@@ -452,7 +503,7 @@ internal fun HomeUiState.snackMessage(): String? = when (val outcome = (this as?
 @Composable
 private fun HomeScreenEmptyPreview() {
     VoiceSearchTheme {
-        HomeScreenContent(onAddTable = {}, onOpenMenu = {}, state = HomeUiState.Empty)
+        HomeScreenContent(onAddTable = {}, onOpenSettings = {}, state = HomeUiState.Empty)
     }
 }
 
@@ -463,7 +514,7 @@ private fun HomeScreenWithTablePreview() {
     VoiceSearchTheme {
         HomeScreenContent(
             onAddTable = {},
-            onOpenMenu = {},
+            onOpenSettings = {},
             state = HomeUiState.Active(
                 tableName = "Прайс поставщика",
                 tableId = "t1",

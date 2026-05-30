@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -31,6 +32,9 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all {
+                it.systemProperty("robolectric.graphicsMode", "NATIVE")
+            }
         }
     }
 }
@@ -50,8 +54,15 @@ dependencies {
 
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
-    // Stage 0.5 adds screenshot tests (Roborazzi). For now only basic units.
+    // Screenshot tests on JVM (Robolectric + Roborazzi).
+    // Records into core/ui/src/test/snapshots/ — committed to git so PRs show diffs.
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi.core)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.rule)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

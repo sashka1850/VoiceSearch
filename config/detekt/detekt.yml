@@ -1,0 +1,27 @@
+# Project detekt overrides on top of the default ruleset.
+# Run `gradlew detekt` to lint. CI fails the build on any new issue.
+
+complexity:
+  LongMethod:
+    threshold: 80           # Compose @Composable methods are naturally longer
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 10
+  TooManyFunctions:
+    thresholdInClasses: 20
+    thresholdInFiles: 25
+    thresholdInObjects: 20
+
+style:
+  MagicNumber:
+    active: false           # dp/sp values trip this constantly in Compose
+  ReturnCount:
+    max: 4
+  MaxLineLength:
+    maxLineLength: 140
+
+naming:
+  FunctionNaming:
+    excludes: ['**/*.kt']
+    # Composables use PascalCase — would conflict otherwise; we skip the rule entirely
+    # since Compose is a first-class convention in this project.

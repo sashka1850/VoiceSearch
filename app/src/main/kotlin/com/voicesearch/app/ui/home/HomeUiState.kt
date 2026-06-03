@@ -14,6 +14,12 @@ sealed interface HomeUiState {
         val manualInput: ManualInputState,
         val lastOutcome: SearchOutcome?,
         val yandexAuthenticated: Boolean = false,
+        /**
+         * Live transcript from the speech engine while the user is holding the
+         * mic. Already normalised (letters + digits only) so the slot row can
+         * paint it character-by-character.
+         */
+        val voiceTranscript: String = "",
     ) : HomeUiState
 }
 
@@ -30,8 +36,9 @@ data class ManualInputState(
 enum class MicState { Idle, Listening, Processing }
 
 sealed interface PromptHint {
-    data class FixedSuffix(val length: Int) : PromptHint
-    data class VariableSuffix(val maxLength: Int) : PromptHint
+    /** Carry the actual prefix string so the UI can paint it next to the slot row. */
+    data class FixedSuffix(val prefix: String, val length: Int) : PromptHint
+    data class VariableSuffix(val prefix: String, val maxLength: Int) : PromptHint
     data object FullValue : PromptHint
     data object NotConfigured : PromptHint
 
@@ -44,8 +51,8 @@ sealed interface PromptHint {
 
     companion object {
         fun fromPrefix(hint: PrefixHint?): PromptHint = when (hint) {
-            is PrefixHint.FixedSuffix -> FixedSuffix(hint.suffixLength)
-            is PrefixHint.VariableSuffix -> VariableSuffix(hint.maxSuffixLength)
+            is PrefixHint.FixedSuffix -> FixedSuffix(hint.prefix, hint.suffixLength)
+            is PrefixHint.VariableSuffix -> VariableSuffix(hint.prefix, hint.maxSuffixLength)
             PrefixHint.FullMatch -> FullValue
             null -> FullValue
         }

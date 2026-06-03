@@ -212,6 +212,7 @@ private fun HomeScreenContent(
                 if (state is HomeUiState.Active && state.manualInput.isVisible) {
                     ManualSearchBar(
                         text = state.manualInput.text,
+                        hint = state.hint,
                         onTextChange = callbacks.onManualInputChange,
                         onSubmit = callbacks.onManualInputSubmit,
                         onDismiss = callbacks.onManualInputDismiss,
@@ -277,6 +278,7 @@ private fun HomeScreenContent(
 @Composable
 private fun ManualSearchBar(
     text: String,
+    hint: PromptHint,
     onTextChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onDismiss: () -> Unit,
@@ -288,45 +290,73 @@ private fun ManualSearchBar(
         focusRequester.requestFocus()
     }
 
+    val slotInfo = hint.toSlotInfo()
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = LocalElevation.current.medium,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
-                placeholder = { Text("Введите значение для поиска") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
-                    onSubmit()
-                    keyboard?.hide()
-                }),
-                trailingIcon = {
-                    if (text.isNotEmpty()) {
-                        IconButton(onClick = { onTextChange("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Очистить")
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            if (slotInfo != null) {
+                PrefixedSlotsRow(
+                    prefix = slotInfo.prefix,
+                    filled = text,
+                    slotCount = slotInfo.slots,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { value ->
+                        // If a slot cap exists, drop anything past it so the row never overflows.
+                        val capped = slotInfo?.let { value.take(it.slots) } ?: value
+                        onTextChange(capped)
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester),
+                    placeholder = {
+                        Text(
+                            text = if (slotInfo != null) "Введите ${slotInfo.slots} символов"
+                            else "Введите значение для поиска",
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        onSubmit()
+                        keyboard?.hide()
+                    }),
+                    trailingIcon = {
+                        if (text.isNotEmpty()) {
+                            IconButton(onClick = { onTextChange("") }) {
+                                Icon(Icons.Default.Close, contentDescription = "Очистить")
+                            }
                         }
-                    }
-                },
-            )
-            Spacer(Modifier.size(8.dp))
-            IconButton(onClick = {
-                keyboard?.hide()
-                onDismiss()
-            }) {
-                Icon(Icons.Default.Close, contentDescription = "Закрыть поиск")
+                    },
+                )
+                Spacer(Modifier.size(8.dp))
+                IconButton(onClick = {
+                    keyboard?.hide()
+                    onDismiss()
+                }) {
+                    Icon(Icons.Default.Close, contentDescription = "Закрыть поиск")
+                }
             }
         }
     }
+}
+
+private data class SlotInfo(val prefix: String, val slots: Int)
+
+private fun PromptHint.toSlotInfo(): SlotInfo? = when (this) {
+    is PromptHint.FixedSuffix -> SlotInfo(prefix = prefix, slots = length)
+    is PromptHint.VariableSuffix -> SlotInfo(prefix = prefix, slots = maxLength)
+    PromptHint.FullValue, PromptHint.NotConfigured -> null
 }
 
 @Composable
@@ -384,7 +414,16 @@ private fun ActiveState(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(32.dp))
+
+        Spacer(Modifier.height(16.dp))
+
+        // Live voice transcript. Shows the slot row when a prefix exists so the
+        // user sees the same shape they'd see while typing manually; falls back
+        // to a plain "<text>" when in FullValue mode. Hidden when the mic is
+        // idle and no transcript has arrived yet.
+        VoiceTranscriptRow(hint = state.hint, mic = state.mic, transcript = state.voiceTranscript)
+
+        Spacer(Modifier.height(16.dp))
 
         // Press-and-hold mic. detectTapGestures gives us onPress + tryAwaitRelease(),
         // covering both normal release (finger up) and gesture cancel.
@@ -439,6 +478,34 @@ private fun ActiveState(
         if (outcome is SearchOutcome.Marked) {
             Spacer(Modifier.height(24.dp))
             MarkedCard(outcome)
+        }
+    }
+}
+
+@Composable
+private fun VoiceTranscriptRow(hint: PromptHint, mic: MicState, transcript: String) {
+    // Reserve a fixed slot so the mic doesn't jump when the row appears.
+    val slotInfo = hint.toSlotInfo()
+    val isLive = mic == MicState.Listening || transcript.isNotEmpty()
+
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            !isLive -> Spacer(Modifier.height(32.dp))
+            slotInfo != null -> PrefixedSlotsRow(
+                prefix = slotInfo.prefix,
+                filled = transcript,
+                slotCount = slotInfo.slots,
+            )
+            else -> Text(
+                text = transcript.ifBlank { "…" },
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.secondary,
+            )
         }
     }
 }
@@ -565,11 +632,12 @@ private fun HomeScreenWithTablePreview() {
             state = HomeUiState.Active(
                 tableName = "Прайс поставщика",
                 tableId = "t1",
-                hint = PromptHint.FixedSuffix(5),
+                hint = PromptHint.FixedSuffix(prefix = "12345", length = 5),
                 mic = MicState.Idle,
                 manualInput = ManualInputState(),
                 lastOutcome = null,
                 yandexAuthenticated = false,
+                voiceTranscript = "",
             ),
         )
     }

@@ -16,6 +16,7 @@ import com.voicesearch.core.domain.repository.TableSettingsRepository
 import com.voicesearch.core.domain.repository.YandexAuthRepository
 import com.voicesearch.core.domain.repository.YandexAuthState
 import com.voicesearch.core.domain.search.SearchMatcher
+import com.voicesearch.core.domain.search.SearchMatcher.normaliseQuery
 import com.voicesearch.core.domain.speech.SpeechError
 import com.voicesearch.core.domain.speech.SpeechEvent
 import com.voicesearch.core.domain.speech.SpeechRecognitionEngine
@@ -78,6 +79,9 @@ class HomeViewModel @Inject constructor(
     private val manualInputState = MutableStateFlow(ManualInputState())
     private val lastOutcome = MutableStateFlow<SearchOutcome?>(null)
 
+    /** Live transcript stripped to letters+digits — drives the slot row UI. */
+    private val voiceTranscript = MutableStateFlow("")
+
     /**
      * One-shot side-effect channel for the share intent. UI collects via [shareEvents].
      * Buffered so a rapid "press → press" doesn't drop a request while the previous
@@ -93,7 +97,7 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), YandexAuthState.NotAuthenticated)
 
     val state: StateFlow<HomeUiState> = combine(
-        listOf(activeTable, activeSettings, micState, manualInputState, lastOutcome, yandexAuth),
+        listOf(activeTable, activeSettings, micState, manualInputState, lastOutcome, yandexAuth, voiceTranscript),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val table = values[0] as Table?
@@ -104,6 +108,7 @@ class HomeViewModel @Inject constructor(
         @Suppress("UNCHECKED_CAST")
         val outcome = values[4] as SearchOutcome?
         val auth = values[5] as YandexAuthState
+        val transcript = values[6] as String
 
         if (table == null) {
             HomeUiState.Empty
@@ -117,6 +122,7 @@ class HomeViewModel @Inject constructor(
                 manualInput = manual,
                 lastOutcome = outcome,
                 yandexAuthenticated = auth is YandexAuthState.Authenticated,
+                voiceTranscript = transcript,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HomeUiState.Empty)
@@ -151,6 +157,7 @@ class HomeViewModel @Inject constructor(
             return
         }
         lastOutcome.value = null
+        voiceTranscript.value = ""
         micState.value = MicState.Listening
         speechEngine.start()
     }
@@ -272,14 +279,18 @@ class HomeViewModel @Inject constructor(
 
     private fun handleSpeechEvent(event: SpeechEvent) {
         when (event) {
-            is SpeechEvent.Final -> viewModelScope.launch { runSearch(event.text) }
+            is SpeechEvent.Ready, SpeechEvent.BeginningOfSpeech -> voiceTranscript.value = ""
+            is SpeechEvent.Partial -> voiceTranscript.value = normaliseQuery(event.text)
+            is SpeechEvent.Final -> {
+                voiceTranscript.value = normaliseQuery(event.text)
+                viewModelScope.launch { runSearch(event.text) }
+            }
             is SpeechEvent.Error -> {
+                voiceTranscript.value = ""
                 micState.value = MicState.Idle
                 lastOutcome.value = SearchOutcome.Failed(event.reason.userMessage())
             }
-            // We don't surface Ready / BeginningOfSpeech / Partial / EndOfSpeech in state yet —
-            // the UI's "Слушаю" copy is driven by micState transitions in pressMic/releaseMic.
-            else -> Unit
+            SpeechEvent.EndOfSpeech -> Unit
         }
     }
 

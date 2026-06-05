@@ -11,16 +11,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.voicesearch.core.ui.theme.LocalElevation
 
 /**
- * The green dominant action surface — used once per screen as the primary
+ * Large circular action surface — used once per screen as the primary
  * call-to-action (e.g. mic on the search screen).
  *
- * Visual: large circle, green container, white icon, soft shadow that
+ * Visual: large circle, coloured container, contrasting icon, soft shadow that
  * grows when active. Press feedback is driven by the caller via [isActive].
+ *
+ * Colour: defaults to the green secondary (the historical "single dominant
+ * action" colour). The mic on the new dock layout overrides this to the blue
+ * [MaterialTheme.colorScheme.primary] so it reads as part of the blue control
+ * cluster — pass [containerColor]/[contentColor] to do that. Existing call
+ * sites keep the green default and are unaffected.
  */
 @Composable
 fun ActionFab(
@@ -28,7 +36,9 @@ fun ActionFab(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     isActive: Boolean = false,
-    size: androidx.compose.ui.unit.Dp = 96.dp,
+    size: Dp = 96.dp,
+    containerColor: Color = MaterialTheme.colorScheme.secondary,
+    contentColor: Color = MaterialTheme.colorScheme.onSecondary,
 ) {
     val elevation = LocalElevation.current
     val tonalElevation by animateDpAsState(
@@ -39,8 +49,8 @@ fun ActionFab(
     Surface(
         modifier = modifier.size(size),
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondary,
-        contentColor = MaterialTheme.colorScheme.onSecondary,
+        color = containerColor,
+        contentColor = contentColor,
         shadowElevation = tonalElevation,
         tonalElevation = tonalElevation,
     ) {

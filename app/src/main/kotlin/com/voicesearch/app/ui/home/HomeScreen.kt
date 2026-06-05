@@ -290,7 +290,7 @@ private fun ManualSearchBar(
         focusRequester.requestFocus()
     }
 
-    val slotInfo = hint.toSlotInfo()
+    val slotInfo = hint.toSlotInfo(filledLength = text.length)
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -298,22 +298,22 @@ private fun ManualSearchBar(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            if (slotInfo != null) {
-                PrefixedSlotsRow(
-                    prefix = slotInfo.prefix,
-                    filled = text,
-                    slotCount = slotInfo.slots,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                )
-            }
+            PrefixedSlotsRow(
+                prefix = slotInfo.prefix,
+                filled = text,
+                slotCount = slotInfo.slots,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { value ->
-                        // If a slot cap exists, drop anything past it so the row never overflows.
-                        val capped = slotInfo?.let { value.take(it.slots) } ?: value
+                        // For fixed-cap modes drop anything past the slot count
+                        // so the row never overflows; growable mode (FullMatch)
+                        // accepts arbitrary length.
+                        val capped = if (slotInfo.growable) value else value.take(slotInfo.slots)
                         onTextChange(capped)
                     },
                     modifier = Modifier
@@ -321,8 +321,8 @@ private fun ManualSearchBar(
                         .focusRequester(focusRequester),
                     placeholder = {
                         Text(
-                            text = if (slotInfo != null) "Введите ${slotInfo.slots} символов"
-                            else "Введите значение для поиска",
+                            text = if (slotInfo.growable) "Введите значение для поиска"
+                            else "Введите ${slotInfo.slots} символов",
                         )
                     },
                     singleLine = true,
@@ -351,12 +351,26 @@ private fun ManualSearchBar(
     }
 }
 
-private data class SlotInfo(val prefix: String, val slots: Int)
+private data class SlotInfo(
+    val prefix: String,
+    val slots: Int,
+    /** When true, the caller may expand [slots] to fit a longer input. */
+    val growable: Boolean,
+)
 
-private fun PromptHint.toSlotInfo(): SlotInfo? = when (this) {
-    is PromptHint.FixedSuffix -> SlotInfo(prefix = prefix, slots = length)
-    is PromptHint.VariableSuffix -> SlotInfo(prefix = prefix, slots = maxLength)
-    PromptHint.FullValue, PromptHint.NotConfigured -> null
+private const val FULL_MATCH_MIN_SLOTS = 5
+
+private fun PromptHint.toSlotInfo(filledLength: Int = 0): SlotInfo = when (this) {
+    is PromptHint.FixedSuffix -> SlotInfo(prefix = prefix, slots = length, growable = false)
+    is PromptHint.VariableSuffix -> SlotInfo(prefix = prefix, slots = maxLength, growable = false)
+    // No prefix detected — show a small "empty field" by default and grow it
+    // as the user types or speaks longer queries.
+    PromptHint.FullValue,
+    PromptHint.NotConfigured -> SlotInfo(
+        prefix = "",
+        slots = maxOf(FULL_MATCH_MIN_SLOTS, filledLength),
+        growable = true,
+    )
 }
 
 @Composable
@@ -485,7 +499,7 @@ private fun ActiveState(
 @Composable
 private fun VoiceTranscriptRow(hint: PromptHint, mic: MicState, transcript: String) {
     // Reserve a fixed slot so the mic doesn't jump when the row appears.
-    val slotInfo = hint.toSlotInfo()
+    val slotInfo = hint.toSlotInfo(filledLength = transcript.length)
     val isLive = mic == MicState.Listening || transcript.isNotEmpty()
 
     androidx.compose.foundation.layout.Box(
@@ -494,17 +508,13 @@ private fun VoiceTranscriptRow(hint: PromptHint, mic: MicState, transcript: Stri
             .padding(horizontal = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
-        when {
-            !isLive -> Spacer(Modifier.height(32.dp))
-            slotInfo != null -> PrefixedSlotsRow(
+        if (!isLive) {
+            Spacer(Modifier.height(32.dp))
+        } else {
+            PrefixedSlotsRow(
                 prefix = slotInfo.prefix,
                 filled = transcript,
                 slotCount = slotInfo.slots,
-            )
-            else -> Text(
-                text = transcript.ifBlank { "…" },
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.secondary,
             )
         }
     }

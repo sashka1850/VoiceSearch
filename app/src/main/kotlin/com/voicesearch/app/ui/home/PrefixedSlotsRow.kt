@@ -37,12 +37,14 @@ fun PrefixedSlotsRow(
     placeholderColor: Color = MaterialTheme.colorScheme.outline,
     prefixColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
-    if (slotCount <= 0) return
+    // Always show at least one slot so the field never collapses to nothing
+    // when there's no prefix and no input yet (FullMatch mode at rest).
+    val resolvedSlotCount = slotCount.coerceAtLeast(1)
 
     // For variable-length suffixes the user may overshoot the slot count; show
     // the trailing characters that actually fit.
-    val displayed = filled.takeLast(slotCount.coerceAtLeast(filled.length))
-        .take(slotCount)
+    val displayed = filled.takeLast(resolvedSlotCount.coerceAtLeast(filled.length))
+        .take(resolvedSlotCount)
 
     val monoStyle = TextStyle(
         fontFamily = FontFamily.Monospace,
@@ -63,7 +65,7 @@ fun PrefixedSlotsRow(
             )
             Spacer(Modifier.width(8.dp))
         }
-        repeat(slotCount) { i ->
+        repeat(resolvedSlotCount) { i ->
             val char = displayed.getOrNull(i)
             Text(
                 text = char?.toString() ?: "—",

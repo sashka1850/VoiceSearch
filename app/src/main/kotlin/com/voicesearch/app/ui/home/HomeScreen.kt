@@ -5,19 +5,23 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
@@ -45,6 +49,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -53,12 +58,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -166,7 +170,6 @@ data class HomeScreenCallbacks(
     val onSignOutYandex: () -> Unit = {},
 )
 
-@Suppress("LongMethod") // Compose entry-point that wires Scaffold + FAB overlays + sheet.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreenContent(
@@ -180,12 +183,7 @@ private fun HomeScreenContent(
         topBar = {
             if (state is HomeUiState.Active) {
                 TopAppBar(
-                    title = {
-                        Text(
-                            text = state.tableName,
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                    },
+                    title = { Text(text = state.tableName, style = MaterialTheme.typography.titleLarge) },
                     actions = {
                         TableMenu(
                             yandexAuthenticated = state.yandexAuthenticated,
@@ -206,61 +204,15 @@ private fun HomeScreenContent(
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Manual-input strip lives at the top so the system keyboard
-                // animating in doesn't shove other content around.
-                if (state is HomeUiState.Active && state.manualInput.isVisible) {
-                    ManualSearchBar(
-                        text = state.manualInput.text,
-                        hint = state.hint,
-                        onTextChange = callbacks.onManualInputChange,
-                        onSubmit = callbacks.onManualInputSubmit,
-                        onDismiss = callbacks.onManualInputDismiss,
-                    )
+            when (state) {
+                HomeUiState.Empty -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                    EmptyState(onAddTable = onAddTable)
                 }
-
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    when (state) {
-                        HomeUiState.Empty -> EmptyState(onAddTable = onAddTable)
-                        is HomeUiState.Active -> ActiveState(
-                            state = state,
-                            onMicPress = callbacks.onMicPress,
-                            onMicRelease = callbacks.onMicRelease,
-                        )
-                    }
-                }
-            }
-
-            // Two FABs as overlays. Scaffold's slot only supports one, so we
-            // place both manually: keyboard fallback on the left, add-table on the right.
-            if (state is HomeUiState.Active) {
-                FloatingActionButton(
-                    onClick = callbacks.onToggleManualInput,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = CircleShape,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = LocalElevation.current.high,
-                        pressedElevation = LocalElevation.current.low,
-                    ),
-                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
-                ) {
-                    Icon(Icons.Outlined.Keyboard, contentDescription = "Поиск с клавиатуры")
-                }
-
-                FloatingActionButton(
-                    onClick = onAddTable,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = CircleShape,
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = LocalElevation.current.high,
-                        pressedElevation = LocalElevation.current.low,
-                    ),
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Добавить таблицу")
-                }
+                is HomeUiState.Active -> ActiveDock(
+                    state = state,
+                    onAddTable = onAddTable,
+                    callbacks = callbacks,
+                )
             }
         }
 
@@ -275,13 +227,209 @@ private fun HomeScreenContent(
     }
 }
 
+/**
+ * Variant C — "Нижний док". The status stage (hint / result / mic caption)
+ * floats in the upper area; the input field plus the blue control cluster sit
+ * in a bottom dock within thumb reach. Pressing the keyboard FAB swaps the
+ * control row for the in-app [NumericKeypad] — the field stays right above the
+ * keys, never covered.
+ *
+ * For [PromptHint.FullValue] tables (no prefix) the keypad's limited charset
+ * isn't enough, so we drop back to a system-IME [OutlinedTextField] in the
+ * same slot.
+ */
+@Suppress("LongMethod") // Compose entry-point that wires the dock + status stage.
 @Composable
-private fun ManualSearchBar(
+private fun ActiveDock(
+    state: HomeUiState.Active,
+    onAddTable: () -> Unit,
+    callbacks: HomeScreenCallbacks,
+) {
+    val slotInfo = state.hint.toSlotInfo()
+    val typing = state.manualInput.isVisible
+    val filled = if (typing) state.manualInput.text else state.voiceTranscript
+    val status = fieldStatus(state.mic, state.lastOutcome, typing)
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // ── status stage ──
+        Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            ) {
+                val outcome = state.lastOutcome
+                when {
+                    outcome is SearchOutcome.Marked -> MarkedCard(outcome)
+                    state.mic == MicState.Idle && outcome == null && !typing -> Text(
+                        text = state.hint.toDisplayString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                MicCaption(mic = state.mic)
+            }
+        }
+
+        // ── bottom dock ──
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = LocalElevation.current.medium,
+            shape = MaterialTheme.shapes.extraLarge,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                SearchFieldBox(
+                    prefix = slotInfo?.prefix.orEmpty(),
+                    filled = filled,
+                    slotCount = slotInfo?.slots ?: 0,
+                    status = status,
+                )
+
+                if (typing) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = callbacks.onManualInputDismiss) {
+                            Text("Свернуть")
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                        }
+                    }
+                    if (slotInfo != null) {
+                        NumericKeypad(
+                            onKey = { key ->
+                                appendCapped(state.manualInput.text, key, slotInfo.slots, callbacks.onManualInputChange)
+                            },
+                            onBackspace = { callbacks.onManualInputChange(state.manualInput.text.dropLast(1)) },
+                            onDone = callbacks.onManualInputSubmit,
+                            canDone = state.manualInput.text.length == slotInfo.slots,
+                        )
+                    } else {
+                        // FullValue tables need the full system keyboard for arbitrary text.
+                        SystemKeyboardField(
+                            text = state.manualInput.text,
+                            onChange = callbacks.onManualInputChange,
+                            onSubmit = callbacks.onManualInputSubmit,
+                        )
+                    }
+                } else {
+                    DockControls(
+                        onKeyboard = callbacks.onToggleManualInput,
+                        onMicPress = callbacks.onMicPress,
+                        onMicRelease = callbacks.onMicRelease,
+                        micActive = state.mic == MicState.Listening,
+                        onAddTable = onAddTable,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DockControls(
+    onKeyboard: () -> Unit,
+    onMicPress: () -> Unit,
+    onMicRelease: () -> Unit,
+    micActive: Boolean,
+    onAddTable: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BlueFab(onClick = onKeyboard, icon = Icons.Outlined.Keyboard, description = "Поиск с клавиатуры")
+
+        // Press-and-hold mic — blue, part of the control cluster. detectTapGestures
+        // gives us onPress + tryAwaitRelease() (covers finger-up and gesture cancel).
+        Box(
+            modifier = Modifier.pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        onMicPress()
+                        tryAwaitRelease()
+                        onMicRelease()
+                    },
+                )
+            },
+        ) {
+            ActionFab(
+                icon = Icons.Default.Mic,
+                contentDescription = "Микрофон поиска",
+                isActive = micActive,
+                size = 84.dp,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            )
+        }
+
+        BlueFab(onClick = onAddTable, icon = Icons.Default.Add, description = "Добавить таблицу")
+    }
+}
+
+@Composable
+private fun BlueFab(onClick: () -> Unit, icon: ImageVector, description: String) {
+    FloatingActionButton(
+        onClick = onClick,
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shape = CircleShape,
+        elevation = FloatingActionButtonDefaults.elevation(
+            defaultElevation = LocalElevation.current.high,
+            pressedElevation = LocalElevation.current.low,
+        ),
+    ) {
+        Icon(icon, contentDescription = description)
+    }
+}
+
+@Composable
+private fun MicCaption(mic: MicState) {
+    when (mic) {
+        MicState.Idle -> Text(
+            text = "Зажмите и говорите",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        MicState.Listening -> Text(
+            text = "Слушаю…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary,
+        )
+        MicState.Processing -> Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.size(8.dp))
+            Text(
+                text = "Ищем…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * System-IME fallback used when there's no prefix to constrain input.
+ * Auto-focuses on appear so the soft keyboard opens immediately; the IME
+ * Search action submits.
+ */
+@Composable
+private fun SystemKeyboardField(
     text: String,
-    hint: PromptHint,
-    onTextChange: (String) -> Unit,
+    onChange: (String) -> Unit,
     onSubmit: () -> Unit,
-    onDismiss: () -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -290,86 +438,26 @@ private fun ManualSearchBar(
         focusRequester.requestFocus()
     }
 
-    val slotInfo = hint.toSlotInfo(filledLength = text.length)
-
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = LocalElevation.current.medium,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            PrefixedSlotsRow(
-                prefix = slotInfo.prefix,
-                filled = text,
-                slotCount = slotInfo.slots,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { value ->
-                        // For fixed-cap modes drop anything past the slot count
-                        // so the row never overflows; growable mode (FullMatch)
-                        // accepts arbitrary length.
-                        val capped = if (slotInfo.growable) value else value.take(slotInfo.slots)
-                        onTextChange(capped)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester),
-                    placeholder = {
-                        Text(
-                            text = if (slotInfo.growable) "Введите значение для поиска"
-                            else "Введите ${slotInfo.slots} символов",
-                        )
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {
-                        onSubmit()
-                        keyboard?.hide()
-                    }),
-                    trailingIcon = {
-                        if (text.isNotEmpty()) {
-                            IconButton(onClick = { onTextChange("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Очистить")
-                            }
-                        }
-                    },
-                )
-                Spacer(Modifier.size(8.dp))
-                IconButton(onClick = {
-                    keyboard?.hide()
-                    onDismiss()
-                }) {
-                    Icon(Icons.Default.Close, contentDescription = "Закрыть поиск")
+    OutlinedTextField(
+        value = text,
+        onValueChange = onChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester),
+        placeholder = { Text("Введите значение для поиска") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = {
+            onSubmit()
+            keyboard?.hide()
+        }),
+        trailingIcon = {
+            if (text.isNotEmpty()) {
+                IconButton(onClick = { onChange("") }) {
+                    Icon(Icons.Default.Close, contentDescription = "Очистить")
                 }
             }
-        }
-    }
-}
-
-private data class SlotInfo(
-    val prefix: String,
-    val slots: Int,
-    /** When true, the caller may expand [slots] to fit a longer input. */
-    val growable: Boolean,
-)
-
-private const val FULL_MATCH_MIN_SLOTS = 5
-
-private fun PromptHint.toSlotInfo(filledLength: Int = 0): SlotInfo = when (this) {
-    is PromptHint.FixedSuffix -> SlotInfo(prefix = prefix, slots = length, growable = false)
-    is PromptHint.VariableSuffix -> SlotInfo(prefix = prefix, slots = maxLength, growable = false)
-    // No prefix detected — show a small "empty field" by default and grow it
-    // as the user types or speaks longer queries.
-    PromptHint.FullValue,
-    PromptHint.NotConfigured -> SlotInfo(
-        prefix = "",
-        slots = maxOf(FULL_MATCH_MIN_SLOTS, filledLength),
-        growable = true,
+        },
     )
 }
 
@@ -414,124 +502,14 @@ private fun EmptyState(onAddTable: () -> Unit) {
 }
 
 @Composable
-private fun ActiveState(
-    state: HomeUiState.Active,
-    onMicPress: () -> Unit,
-    onMicRelease: () -> Unit,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = state.hint.toDisplayString(),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        // Live voice transcript. Shows the slot row when a prefix exists so the
-        // user sees the same shape they'd see while typing manually; falls back
-        // to a plain "<text>" when in FullValue mode. Hidden when the mic is
-        // idle and no transcript has arrived yet.
-        VoiceTranscriptRow(hint = state.hint, mic = state.mic, transcript = state.voiceTranscript)
-
-        Spacer(Modifier.height(16.dp))
-
-        // Press-and-hold mic. detectTapGestures gives us onPress + tryAwaitRelease(),
-        // covering both normal release (finger up) and gesture cancel.
-        Box(
-            modifier = Modifier.pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        onMicPress()
-                        tryAwaitRelease()
-                        onMicRelease()
-                    },
-                )
-            },
-        ) {
-            ActionFab(
-                icon = Icons.Default.Mic,
-                contentDescription = "Микрофон поиска",
-                isActive = state.mic == MicState.Listening,
-            )
-        }
-
-        Spacer(Modifier.height(20.dp))
-        when (state.mic) {
-            MicState.Idle -> Text(
-                text = "Зажмите и говорите",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            MicState.Listening -> Text(
-                text = "Слушаю…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            MicState.Processing -> Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.height(0.dp))
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    text = "Ищем…",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        // Persistent success/failure card below; snackbar would also work but a card sticks
-        // around longer and matches the "found and marked" feedback from the MVP.
-        val outcome = state.lastOutcome
-        if (outcome is SearchOutcome.Marked) {
-            Spacer(Modifier.height(24.dp))
-            MarkedCard(outcome)
-        }
-    }
-}
-
-@Composable
-private fun VoiceTranscriptRow(hint: PromptHint, mic: MicState, transcript: String) {
-    // Reserve a fixed slot so the mic doesn't jump when the row appears.
-    val slotInfo = hint.toSlotInfo(filledLength = transcript.length)
-    val isLive = mic == MicState.Listening || transcript.isNotEmpty()
-
-    androidx.compose.foundation.layout.Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (!isLive) {
-            Spacer(Modifier.height(32.dp))
-        } else {
-            PrefixedSlotsRow(
-                prefix = slotInfo.prefix,
-                filled = transcript,
-                slotCount = slotInfo.slots,
-            )
-        }
-    }
-}
-
-@Composable
 private fun MarkedCard(outcome: SearchOutcome.Marked) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 imageVector = Icons.Filled.CheckCircle,
                 contentDescription = null,
@@ -539,10 +517,7 @@ private fun MarkedCard(outcome: SearchOutcome.Marked) {
             )
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Отмечено",
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                Text(text = "Отмечено", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = listOfNotNull(outcome.cellValue.takeIf { it.isNotBlank() }, outcome.name)
                         .joinToString(" — "),
@@ -571,48 +546,41 @@ private fun TableMenu(
             DropdownMenuItem(
                 text = { Text("Поделиться файлом") },
                 leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                onClick = {
-                    open = false
-                    onShare()
-                },
+                onClick = { open = false; onShare() },
             )
             DropdownMenuItem(
                 text = { Text("Настройки таблицы") },
                 leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-                onClick = {
-                    open = false
-                    onOpenSettings()
-                },
+                onClick = { open = false; onOpenSettings() },
             )
             if (yandexAuthenticated) {
                 DropdownMenuItem(
                     text = { Text("Синхронизировать с Я.Диском") },
                     leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
-                    onClick = {
-                        open = false
-                        onSyncNow()
-                    },
+                    onClick = { open = false; onSyncNow() },
                 )
                 DropdownMenuItem(
                     text = { Text("Выйти из Я.Диска") },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
-                    onClick = {
-                        open = false
-                        onSignOutYandex()
-                    },
+                    onClick = { open = false; onSignOutYandex() },
                 )
             } else {
                 DropdownMenuItem(
                     text = { Text("Войти в Я.Диск") },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null) },
-                    onClick = {
-                        open = false
-                        onConnectYandex()
-                    },
+                    onClick = { open = false; onConnectYandex() },
                 )
             }
         }
     }
+}
+
+private data class SlotInfo(val prefix: String, val slots: Int)
+
+private fun PromptHint.toSlotInfo(): SlotInfo? = when (this) {
+    is PromptHint.FixedSuffix -> SlotInfo(prefix = prefix, slots = length)
+    is PromptHint.VariableSuffix -> SlotInfo(prefix = prefix, slots = maxLength)
+    PromptHint.FullValue, PromptHint.NotConfigured -> null
 }
 
 internal fun HomeUiState.snackMessage(): String? = when (val outcome = (this as? HomeUiState.Active)?.lastOutcome) {
@@ -623,7 +591,7 @@ internal fun HomeUiState.snackMessage(): String? = when (val outcome = (this as?
 }
 
 @Suppress("UnusedPrivateMember")
-@Preview(showBackground = true, widthDp = 360, heightDp = 720)
+@Preview(showBackground = true, widthDp = 360, heightDp = 740)
 @Composable
 private fun HomeScreenEmptyPreview() {
     VoiceSearchTheme {
@@ -632,9 +600,9 @@ private fun HomeScreenEmptyPreview() {
 }
 
 @Suppress("UnusedPrivateMember")
-@Preview(showBackground = true, widthDp = 360, heightDp = 720)
+@Preview(showBackground = true, widthDp = 360, heightDp = 740)
 @Composable
-private fun HomeScreenWithTablePreview() {
+private fun HomeScreenDockPreview() {
     VoiceSearchTheme {
         HomeScreenContent(
             onAddTable = {},
@@ -642,12 +610,12 @@ private fun HomeScreenWithTablePreview() {
             state = HomeUiState.Active(
                 tableName = "Прайс поставщика",
                 tableId = "t1",
-                hint = PromptHint.FixedSuffix(prefix = "12345", length = 5),
+                hint = PromptHint.FixedSuffix(prefix = "52ОМ139W", length = 6),
                 mic = MicState.Idle,
                 manualInput = ManualInputState(),
-                lastOutcome = null,
+                lastOutcome = SearchOutcome.Marked(cellValue = "52ОМ139W204517", name = "Шланг РВД 2SN DN12"),
                 yandexAuthenticated = false,
-                voiceTranscript = "",
+                voiceTranscript = "204517",
             ),
         )
     }

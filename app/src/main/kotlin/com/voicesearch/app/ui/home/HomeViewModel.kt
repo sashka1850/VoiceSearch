@@ -82,6 +82,9 @@ class HomeViewModel @Inject constructor(
     /** Live transcript stripped to letters+digits — drives the slot row UI. */
     private val voiceTranscript = MutableStateFlow("")
 
+    /** Pair of (dialog open?, exchange in flight?). Drives the OOB code-entry dialog. */
+    private val yandexCodeEntry = MutableStateFlow(false to false)
+
     /**
      * One-shot side-effect channel for the share intent. UI collects via [shareEvents].
      * Buffered so a rapid "press → press" doesn't drop a request while the previous
@@ -97,7 +100,16 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), YandexAuthState.NotAuthenticated)
 
     val state: StateFlow<HomeUiState> = combine(
-        listOf(activeTable, activeSettings, micState, manualInputState, lastOutcome, yandexAuth, voiceTranscript),
+        listOf(
+            activeTable,
+            activeSettings,
+            micState,
+            manualInputState,
+            lastOutcome,
+            yandexAuth,
+            voiceTranscript,
+            yandexCodeEntry,
+        ),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val table = values[0] as Table?
@@ -109,6 +121,8 @@ class HomeViewModel @Inject constructor(
         val outcome = values[4] as SearchOutcome?
         val auth = values[5] as YandexAuthState
         val transcript = values[6] as String
+        @Suppress("UNCHECKED_CAST")
+        val codeEntry = values[7] as Pair<Boolean, Boolean>
 
         if (table == null) {
             HomeUiState.Empty
@@ -123,6 +137,8 @@ class HomeViewModel @Inject constructor(
                 lastOutcome = outcome,
                 yandexAuthenticated = auth is YandexAuthState.Authenticated,
                 voiceTranscript = transcript,
+                awaitingYandexCode = codeEntry.first,
+                yandexCodeSubmitting = codeEntry.second,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HomeUiState.Empty)
@@ -224,7 +240,11 @@ class HomeViewModel @Inject constructor(
 
     fun connectYandex() {
         when (val result = yandexAuthLauncher.launch()) {
-            YandexAuthLauncher.LaunchResult.Launched -> Unit // wait for redirect
+            YandexAuthLauncher.LaunchResult.Launched -> {
+                // OOB flow: user authorises in browser, copies the code Yandex
+                // displays, and pastes it into our dialog.
+                yandexCodeEntry.value = true to false
+            }
             YandexAuthLauncher.LaunchResult.MissingConfig -> {
                 lastOutcome.value = SearchOutcome.Failed(
                     "ClientID не настроен. Добавьте YANDEX_CLIENT_ID в local.properties.",
@@ -234,6 +254,28 @@ class HomeViewModel @Inject constructor(
                 lastOutcome.value = SearchOutcome.Failed(result.message)
             }
         }
+    }
+
+    fun submitYandexCode(code: String) {
+        val trimmed = code.trim()
+        if (trimmed.isEmpty()) return
+        yandexCodeEntry.value = true to true
+        viewModelScope.launch {
+            when (val result = yandexAuthHandler.handleAuthCode(trimmed)) {
+                is YandexAuthHandler.Result.Success -> {
+                    yandexCodeEntry.value = false to false
+                    lastOutcome.value = SearchOutcome.Failed("Вход в Яндекс выполнен")
+                }
+                is YandexAuthHandler.Result.Failure -> {
+                    yandexCodeEntry.value = true to false
+                    lastOutcome.value = SearchOutcome.Failed(result.message)
+                }
+            }
+        }
+    }
+
+    fun cancelYandexAuth() {
+        yandexCodeEntry.value = false to false
     }
 
     fun signOutYandex() {

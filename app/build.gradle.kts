@@ -35,11 +35,13 @@ android {
 
         buildConfigField("String", "YANDEX_CLIENT_ID", "\"$yandexClientId\"")
         buildConfigField("String", "YANDEX_CLIENT_SECRET", "\"$yandexClientSecret\"")
-        // Yandex auto-derives redirect URI from the ClientID: yandexta://<clientId>/
+        // OOB redirect — Yandex shows the auth code on a page; the user copies it
+        // into our in-app dialog. The new Я.ID console no longer issues native
+        // `yandexta://` URIs for API-access apps, so this is the supported path.
         buildConfigField(
             "String",
             "YANDEX_REDIRECT_URI",
-            "\"yandexta://$yandexClientId/\"",
+            "\"https://oauth.yandex.ru/verification_code\"",
         )
 
         // Used by AndroidManifest's intent-filter so deep links match the same URI

@@ -8,6 +8,7 @@ import androidx.browser.customtabs.CustomTabsIntent
 import com.voicesearch.app.BuildConfig
 import com.voicesearch.core.network.yandex.YandexAuthUris
 import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import javax.inject.Inject
 
 /**
@@ -28,6 +29,12 @@ class YandexAuthLauncher @Inject constructor(
             redirectUri = redirect,
             scopes = YandexAuthUris.DISK_SCOPES,
         )
+
+        // Debug aid: paste this exact redirect_uri value into the Yandex OAuth
+        // cabinet's "Redirect URI" field. Any mismatch (case, trailing slash,
+        // whitespace) returns a 400.
+        Timber.i("Yandex OAuth → opening: %s", uri)
+        Timber.i("Yandex OAuth → redirect_uri sent: %s", redirect)
 
         return try {
             CustomTabsIntent.Builder().build().also { it.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }

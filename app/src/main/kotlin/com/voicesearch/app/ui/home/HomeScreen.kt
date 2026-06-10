@@ -149,6 +149,8 @@ fun HomeScreen(
             onConnectYandex = viewModel::connectYandex,
             onSyncNow = viewModel::syncNow,
             onSignOutYandex = viewModel::signOutYandex,
+            onYandexCodeSubmit = viewModel::submitYandexCode,
+            onYandexCodeCancel = viewModel::cancelYandexAuth,
         ),
         snackbar = snackbar,
     )
@@ -168,6 +170,8 @@ data class HomeScreenCallbacks(
     val onConnectYandex: () -> Unit = {},
     val onSyncNow: () -> Unit = {},
     val onSignOutYandex: () -> Unit = {},
+    val onYandexCodeSubmit: (String) -> Unit = {},
+    val onYandexCodeCancel: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -224,7 +228,68 @@ private fun HomeScreenContent(
                 onApply = callbacks.onApplySelection,
             )
         }
+
+        if (state is HomeUiState.Active && state.awaitingYandexCode) {
+            YandexCodeDialog(
+                isSubmitting = state.yandexCodeSubmitting,
+                onSubmit = callbacks.onYandexCodeSubmit,
+                onCancel = callbacks.onYandexCodeCancel,
+            )
+        }
     }
+}
+
+@Composable
+private fun YandexCodeDialog(
+    isSubmitting: Boolean,
+    onSubmit: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var code by remember { mutableStateOf("") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!isSubmitting) onCancel() },
+        title = { Text("Введите код от Яндекса") },
+        text = {
+            Column {
+                Text(
+                    text = "После согласия Яндекс показал короткий код на странице. " +
+                        "Скопируй и вставь его сюда.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it.trim() },
+                    placeholder = { Text("XXXXXXX") },
+                    singleLine = true,
+                    enabled = !isSubmitting,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = { onSubmit(code) },
+                enabled = code.isNotBlank() && !isSubmitting,
+            ) {
+                if (isSubmitting) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp),
+                    )
+                } else {
+                    Text("Подтвердить")
+                }
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(
+                onClick = onCancel,
+                enabled = !isSubmitting,
+            ) { Text("Отмена") }
+        },
+    )
 }
 
 /**
@@ -616,6 +681,8 @@ private fun HomeScreenDockPreview() {
                 lastOutcome = SearchOutcome.Marked(cellValue = "52ОМ139W204517", name = "Шланг РВД 2SN DN12"),
                 yandexAuthenticated = false,
                 voiceTranscript = "204517",
+                awaitingYandexCode = false,
+                yandexCodeSubmitting = false,
             ),
         )
     }

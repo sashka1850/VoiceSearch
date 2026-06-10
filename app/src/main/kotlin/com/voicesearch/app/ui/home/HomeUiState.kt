@@ -20,6 +20,13 @@ sealed interface HomeUiState {
          * paint it character-by-character.
          */
         val voiceTranscript: String = "",
+        /**
+         * When true, the Yandex OOB code-entry dialog is shown. Set after the
+         * user taps "Войти в Я.Диск" (we launch the browser and prompt for the
+         * code page Yandex displays at the end of the consent flow).
+         */
+        val awaitingYandexCode: Boolean = false,
+        val yandexCodeSubmitting: Boolean = false,
     ) : HomeUiState
 }
 

@@ -655,8 +655,14 @@ private fun TableMenu(
     }
 }
 
-/** "Now" recomposition cadence for relative-time captions. One minute is plenty. */
-private const val NOW_TICK_MS = 60_000L
+/**
+ * Repaint cadence for the table info card's "X мин назад" caption.
+ *
+ * 15 s lets the boundary crossings ("только что" → "1 мин назад" → …) land
+ * within ≤15 s of the real change. Compared to 60 s it's invisible on power
+ * and well below the threshold of perceived staleness.
+ */
+private const val NOW_TICK_MS = 15_000L
 
 private data class SlotInfo(val prefix: String, val slots: Int)
 

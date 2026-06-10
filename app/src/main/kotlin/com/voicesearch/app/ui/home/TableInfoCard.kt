@@ -62,15 +62,19 @@ fun TableInfoCard(
     nowMillis: Long,
     modifier: Modifier = Modifier,
 ) {
-    // Detect a successful sync that arrived since composition — pulse green for ~1.6 s.
-    var greenPulseUntil by remember { mutableStateOf(0L) }
-    val lastSuccess = info.sync.lastSuccessAt
-    LaunchedEffect(lastSuccess) {
-        if (lastSuccess != null && lastSuccess > 0L && greenPulseUntil < lastSuccess) {
-            greenPulseUntil = lastSuccess + GREEN_PULSE_MS
+    // Pulse green for exactly GREEN_PULSE_MS after a *new* successful sync
+    // lands. Driven by a dedicated coroutine, NOT the nowMillis clock — that
+    // ticks every 15 s and would leave the wash on for much longer than intended.
+    var pulsing by remember(info.tableId) { mutableStateOf(false) }
+    val initialLastSuccess = remember(info.tableId) { info.sync.lastSuccessAt }
+    LaunchedEffect(info.tableId, info.sync.lastSuccessAt) {
+        val current = info.sync.lastSuccessAt
+        if (current != null && current != initialLastSuccess) {
+            pulsing = true
+            delay(GREEN_PULSE_MS)
+            pulsing = false
         }
     }
-    val pulsing = nowMillis < greenPulseUntil
 
     val scheme = MaterialTheme.colorScheme
     val showError = info.sync.lastError != null

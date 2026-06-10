@@ -66,7 +66,27 @@ class UploadTableUseCase @Inject constructor(
             )
             Result.Success(targetPath = remotePath)
         }.getOrElse { error ->
-            Result.Failure("Загрузка не удалась: ${error.message ?: error::class.simpleName}")
+            Result.Failure(humanise(error))
+        }
+    }
+
+    /**
+     * Map common Yandex / HTTP error codes to actionable Russian messages.
+     * Falls back to the raw exception text for everything else.
+     */
+    private fun humanise(error: Throwable): String {
+        val raw = error.message.orEmpty()
+        return when {
+            raw.contains("HTTP 423") -> "Файл занят: открыт в Яндекс.Документах " +
+                "или предыдущая синхронизация ещё не завершилась. Закройте файл в браузере " +
+                "и попробуйте через минуту."
+            raw.contains("HTTP 401") -> "Токен Я.Диска недействителен. Выйдите и войдите снова."
+            raw.contains("HTTP 403") -> "Нет права на запись. Проверьте, что в Яндекс-кабинете " +
+                "у приложения есть доступ cloud_api:disk.write."
+            raw.contains("HTTP 404") -> "Путь на Я.Диске не найден."
+            raw.contains("HTTP 507") -> "На Я.Диске закончилось место."
+            raw.contains("HTTP 5") -> "Сервер Я.Диска временно недоступен. WorkManager повторит позже."
+            else -> "Загрузка не удалась: ${raw.ifBlank { error::class.simpleName.orEmpty() }}"
         }
     }
 }

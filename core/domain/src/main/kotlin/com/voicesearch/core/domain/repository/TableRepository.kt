@@ -1,6 +1,8 @@
 package com.voicesearch.core.domain.repository
 
 import com.voicesearch.core.domain.model.Table
+import com.voicesearch.core.domain.model.TableInfo
+import com.voicesearch.core.domain.model.TableSyncStatus
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -10,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
  * snapshots. ViewModels and use cases depend on the interface only, so
  * swapping the storage (e.g. for testing) is one-line.
  */
+@Suppress("TooManyFunctions") // Aggregates table CRUD + rows + sync status into one port intentionally.
 interface TableRepository {
 
     fun observeAll(): Flow<List<Table>>
@@ -40,6 +43,13 @@ interface TableRepository {
 
     /** Bulk variant used when the user picks "Выбрать все" in multi-match. */
     suspend fun setRowsMarked(rowIds: Collection<Long>, marked: Boolean, markedAt: Long?)
+
+    /** Live counts + sync status for the info card on the home screen. */
+    fun observeInfo(tableId: String): Flow<TableInfo?>
+
+    suspend fun recordSyncSuccess(tableId: String, attemptAt: Long, successAt: Long)
+    suspend fun recordSyncFailure(tableId: String, attemptAt: Long, error: String)
+    suspend fun observeSyncStatus(tableId: String): TableSyncStatus?
 }
 
 /**

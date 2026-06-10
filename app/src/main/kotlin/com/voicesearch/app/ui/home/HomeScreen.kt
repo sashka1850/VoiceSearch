@@ -315,6 +315,17 @@ private fun ActiveDock(
     val filled = if (typing) state.manualInput.text else state.voiceTranscript
     val status = fieldStatus(state.mic, state.lastOutcome, typing)
 
+    // Tick once a minute so the "5 мин назад" caption stays fresh while the user
+    // sits on the screen. produceState would also work; remember/LaunchedEffect
+    // is cheaper for a once-a-minute pulse.
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            nowMillis = System.currentTimeMillis()
+            kotlinx.coroutines.delay(NOW_TICK_MS)
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // ── status stage ──
         Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -324,6 +335,10 @@ private fun ActiveDock(
                 modifier = Modifier.padding(horizontal = 24.dp),
             ) {
                 val outcome = state.lastOutcome
+                if (state.info != null && outcome !is SearchOutcome.Marked) {
+                    TableInfoCard(info = state.info, nowMillis = nowMillis)
+                    Spacer(Modifier.height(16.dp))
+                }
                 when {
                     outcome is SearchOutcome.Marked -> MarkedCard(outcome)
                     state.mic == MicState.Idle && outcome == null && !typing -> Text(
@@ -640,6 +655,9 @@ private fun TableMenu(
     }
 }
 
+/** "Now" recomposition cadence for relative-time captions. One minute is plenty. */
+private const val NOW_TICK_MS = 60_000L
+
 private data class SlotInfo(val prefix: String, val slots: Int)
 
 private fun PromptHint.toSlotInfo(): SlotInfo? = when (this) {
@@ -683,6 +701,17 @@ private fun HomeScreenDockPreview() {
                 voiceTranscript = "204517",
                 awaitingYandexCode = false,
                 yandexCodeSubmitting = false,
+                info = com.voicesearch.core.domain.model.TableInfo(
+                    tableId = "t1",
+                    totalRows = 1547,
+                    markedRows = 23,
+                    syncedMarkedRows = 23,
+                    sync = com.voicesearch.core.domain.model.TableSyncStatus(
+                        lastSuccessAt = System.currentTimeMillis() - 120_000L,
+                        lastAttemptAt = System.currentTimeMillis() - 120_000L,
+                        lastError = null,
+                    ),
+                ),
             ),
         )
     }

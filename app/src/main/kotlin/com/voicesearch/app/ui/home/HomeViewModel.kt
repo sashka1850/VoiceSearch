@@ -9,6 +9,7 @@ import com.voicesearch.app.feature.export.domain.ExportTableUseCase
 import com.voicesearch.app.feature.export.domain.ShareableFile
 import com.voicesearch.app.feature.sync.domain.UploadTableUseCase
 import com.voicesearch.core.domain.model.Table
+import com.voicesearch.core.domain.model.TableInfo
 import com.voicesearch.core.domain.model.TableSettings
 import com.voicesearch.core.domain.repository.AppPreferencesRepository
 import com.voicesearch.core.domain.repository.TableRepository
@@ -75,6 +76,12 @@ class HomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), initialValue = null)
 
+    private val activeTableInfo: StateFlow<TableInfo?> = activeTable
+        .flatMapLatest { table ->
+            if (table == null) flowOf(null) else tableRepository.observeInfo(table.id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), initialValue = null)
+
     private val micState = MutableStateFlow(MicState.Idle)
     private val manualInputState = MutableStateFlow(ManualInputState())
     private val lastOutcome = MutableStateFlow<SearchOutcome?>(null)
@@ -109,6 +116,7 @@ class HomeViewModel @Inject constructor(
             yandexAuth,
             voiceTranscript,
             yandexCodeEntry,
+            activeTableInfo,
         ),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
@@ -123,6 +131,8 @@ class HomeViewModel @Inject constructor(
         val transcript = values[6] as String
         @Suppress("UNCHECKED_CAST")
         val codeEntry = values[7] as Pair<Boolean, Boolean>
+        @Suppress("UNCHECKED_CAST")
+        val info = values[8] as TableInfo?
 
         if (table == null) {
             HomeUiState.Empty
@@ -139,6 +149,7 @@ class HomeViewModel @Inject constructor(
                 voiceTranscript = transcript,
                 awaitingYandexCode = codeEntry.first,
                 yandexCodeSubmitting = codeEntry.second,
+                info = info,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HomeUiState.Empty)

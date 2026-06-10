@@ -30,4 +30,25 @@ interface TableDao {
 
     @Query("DELETE FROM tables WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query(
+        """
+        UPDATE tables
+        SET lastSyncAttemptAt = :attemptAt,
+            lastSyncSuccessAt = :successAt,
+            lastSyncError = NULL
+        WHERE id = :id
+        """,
+    )
+    suspend fun recordSyncSuccess(id: String, attemptAt: Long, successAt: Long)
+
+    @Query(
+        """
+        UPDATE tables
+        SET lastSyncAttemptAt = :attemptAt,
+            lastSyncError = :error
+        WHERE id = :id
+        """,
+    )
+    suspend fun recordSyncFailure(id: String, attemptAt: Long, error: String)
 }

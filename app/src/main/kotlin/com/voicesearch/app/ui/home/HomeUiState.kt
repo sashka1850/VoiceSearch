@@ -1,6 +1,7 @@
 package com.voicesearch.app.ui.home
 
 import com.voicesearch.core.domain.model.PrefixHint
+import com.voicesearch.core.domain.model.TableInfo
 import com.voicesearch.core.domain.repository.TableRow
 
 sealed interface HomeUiState {
@@ -27,6 +28,8 @@ sealed interface HomeUiState {
          */
         val awaitingYandexCode: Boolean = false,
         val yandexCodeSubmitting: Boolean = false,
+        /** Live row counts + sync status; null while the first emission lands. */
+        val info: TableInfo? = null,
     ) : HomeUiState
 }
 

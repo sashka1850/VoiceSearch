@@ -6,6 +6,7 @@ import com.voicesearch.core.domain.network.FileUploader
 import com.voicesearch.core.domain.repository.TableRepository
 import com.voicesearch.core.domain.repository.YandexAuthRepository
 import com.voicesearch.core.domain.repository.YandexAuthState
+import com.voicesearch.core.domain.time.Clock
 import com.voicesearch.core.network.yandex.YandexDiskApi
 import javax.inject.Inject
 
@@ -28,6 +29,7 @@ class UploadTableUseCase @Inject constructor(
     private val authRepository: YandexAuthRepository,
     private val diskApi: YandexDiskApi,
     private val fileUploader: FileUploader,
+    private val clock: Clock,
 ) {
 
     sealed interface Result {
@@ -53,6 +55,7 @@ class UploadTableUseCase @Inject constructor(
         val remotePath = (table.source as? TableSource.YandexDisk)?.remotePath
             ?: "/${success.file.displayName}"
 
+        val attemptAt = clock.nowMillis()
         return runCatching {
             val href = diskApi.getUploadHref(
                 bearer = "OAuth ${state.accessToken}",
@@ -64,9 +67,16 @@ class UploadTableUseCase @Inject constructor(
                 bytes = success.artifact.readBytes(),
                 contentType = success.mimeType,
             )
+            tableRepository.recordSyncSuccess(
+                tableId = tableId,
+                attemptAt = attemptAt,
+                successAt = clock.nowMillis(),
+            )
             Result.Success(targetPath = remotePath)
         }.getOrElse { error ->
-            Result.Failure(humanise(error))
+            val message = humanise(error)
+            tableRepository.recordSyncFailure(tableId = tableId, attemptAt = attemptAt, error = message)
+            Result.Failure(message)
         }
     }
 

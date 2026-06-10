@@ -9,16 +9,23 @@ import com.voicesearch.core.data.mapper.toDomain
 import com.voicesearch.core.data.mapper.toEntity
 import com.voicesearch.core.data.db.dao.TableSettingsDao
 import com.voicesearch.core.domain.model.Table
+import com.voicesearch.core.domain.model.TableInfo
+import com.voicesearch.core.domain.model.TableSyncStatus
 import com.voicesearch.core.domain.repository.TableRepository
 import com.voicesearch.core.domain.repository.TableRow
 import com.voicesearch.core.domain.sync.AutoSyncTrigger
 import com.voicesearch.core.domain.time.Clock
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 internal class TableRepositoryImpl @Inject constructor(
     private val database: VoiceSearchDatabase,
@@ -92,4 +99,47 @@ internal class TableRepositoryImpl @Inject constructor(
         val autoSync = settingsDao.get(tableId)?.autoSync == true
         if (autoSync) autoSyncTrigger.requestSync(tableId)
     }
+
+    override fun observeInfo(tableId: String): Flow<TableInfo?> =
+        tableDao.observe(tableId).flatMapLatest { entity ->
+            if (entity == null) {
+                flowOf(null)
+            } else {
+                val syncedUntil = entity.lastSyncSuccessAt ?: 0L
+                combine(
+                    rowDao.countTotal(tableId),
+                    rowDao.countMarked(tableId),
+                    rowDao.countMarkedSynced(tableId, syncedUntil),
+                ) { total, marked, syncedMarked ->
+                    TableInfo(
+                        tableId = tableId,
+                        totalRows = total,
+                        markedRows = marked,
+                        syncedMarkedRows = syncedMarked,
+                        sync = TableSyncStatus(
+                            lastSuccessAt = entity.lastSyncSuccessAt,
+                            lastAttemptAt = entity.lastSyncAttemptAt,
+                            lastError = entity.lastSyncError,
+                        ),
+                    )
+                }
+            }
+        }
+
+    override suspend fun recordSyncSuccess(tableId: String, attemptAt: Long, successAt: Long) {
+        tableDao.recordSyncSuccess(tableId, attemptAt, successAt)
+    }
+
+    override suspend fun recordSyncFailure(tableId: String, attemptAt: Long, error: String) {
+        tableDao.recordSyncFailure(tableId, attemptAt, error)
+    }
+
+    override suspend fun observeSyncStatus(tableId: String): TableSyncStatus? =
+        tableDao.get(tableId)?.let {
+            TableSyncStatus(
+                lastSuccessAt = it.lastSyncSuccessAt,
+                lastAttemptAt = it.lastSyncAttemptAt,
+                lastError = it.lastSyncError,
+            )
+        }
 }

@@ -8,6 +8,7 @@ import androidx.room.Transaction
 import com.voicesearch.core.data.db.entity.TableRowEntity
 import kotlinx.coroutines.flow.Flow
 
+@Suppress("TooManyFunctions") // Mix of mutations and aggregated counts; splitting hurts cohesion more than it helps.
 @Dao
 interface TableRowDao {
 
@@ -41,4 +42,24 @@ interface TableRowDao {
 
     @Query("UPDATE table_rows SET isMarked = :marked, markedAt = :markedAt WHERE id IN (:ids)")
     suspend fun setMarkedAll(ids: Collection<Long>, marked: Boolean, markedAt: Long?)
+
+    @Query("SELECT COUNT(*) FROM table_rows WHERE tableId = :tableId")
+    fun countTotal(tableId: String): kotlinx.coroutines.flow.Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM table_rows WHERE tableId = :tableId AND isMarked = 1")
+    fun countMarked(tableId: String): kotlinx.coroutines.flow.Flow<Int>
+
+    /**
+     * Count of marked rows whose mark was set on or before [syncedUntil]
+     * (i.e. the latest known successful sync timestamp). After a sync the
+     * server image reflects everything stamped at or before that wall-clock.
+     */
+    @Query(
+        """
+        SELECT COUNT(*) FROM table_rows
+        WHERE tableId = :tableId AND isMarked = 1
+          AND markedAt IS NOT NULL AND markedAt <= :syncedUntil
+        """,
+    )
+    fun countMarkedSynced(tableId: String, syncedUntil: Long): kotlinx.coroutines.flow.Flow<Int>
 }

@@ -20,4 +20,10 @@ data class TableEntity(
     val rowCount: Int,
     val importedAt: Long,
     val originalFileName: String?,
+    /** Wall-clock millis of the most recent attempted sync (success OR failure). */
+    val lastSyncAttemptAt: Long? = null,
+    /** Wall-clock millis of the most recent **successful** sync. */
+    val lastSyncSuccessAt: Long? = null,
+    /** Last error message — null after a success. Drives the red glow + caption. */
+    val lastSyncError: String? = null,
 )

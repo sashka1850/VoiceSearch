@@ -24,7 +24,7 @@ import com.voicesearch.core.data.db.entity.TableSettingsEntity
         TableRowEntity::class,
         TableSettingsEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class VoiceSearchDatabase : RoomDatabase() {

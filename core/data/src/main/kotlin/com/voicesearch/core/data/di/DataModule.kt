@@ -10,6 +10,7 @@ import androidx.room.Room
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.voicesearch.core.data.datastore.YandexAuthRepositoryImpl.Companion.YANDEX_AUTH_PREFS
+import com.voicesearch.core.data.db.MIGRATION_1_2
 import com.voicesearch.core.data.db.VoiceSearchDatabase
 import com.voicesearch.core.data.db.dao.TableDao
 import com.voicesearch.core.data.db.dao.TableRowDao
@@ -43,7 +44,7 @@ object DataModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): VoiceSearchDatabase =
         Room.databaseBuilder(context, VoiceSearchDatabase::class.java, VoiceSearchDatabase.NAME)
-            // Migrations land here as we bump schema version.
+            .addMigrations(MIGRATION_1_2)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 

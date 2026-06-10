@@ -204,7 +204,8 @@ private fun HomeScreenContent(
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        // Manage the snackbar ourselves below so we can anchor it at the top.
+        snackbarHost = {},
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -218,6 +219,15 @@ private fun HomeScreenContent(
                     callbacks = callbacks,
                 )
             }
+
+            // Top-anchored snackbar: stays below the app bar, above any keyboard.
+            SnackbarHost(
+                hostState = snackbar,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
         }
 
         val outcome = (state as? HomeUiState.Active)?.lastOutcome
@@ -334,14 +344,15 @@ private fun ActiveDock(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.padding(horizontal = 24.dp),
             ) {
-                val outcome = state.lastOutcome
-                if (state.info != null && outcome !is SearchOutcome.Marked) {
+                // Info card always visible when the table is loaded — the
+                // success notification flies as a top snackbar so it doesn't
+                // shove the card around.
+                if (state.info != null) {
                     TableInfoCard(info = state.info, nowMillis = nowMillis)
                     Spacer(Modifier.height(16.dp))
                 }
-                when {
-                    outcome is SearchOutcome.Marked -> MarkedCard(outcome)
-                    state.mic == MicState.Idle && outcome == null && !typing -> Text(
+                if (state.mic == MicState.Idle && state.lastOutcome == null && !typing) {
+                    Text(
                         text = state.hint.toDisplayString(),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -581,32 +592,6 @@ private fun EmptyState(onAddTable: () -> Unit) {
     }
 }
 
-@Composable
-private fun MarkedCard(outcome: SearchOutcome.Marked) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Filled.CheckCircle,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.secondary,
-            )
-            Spacer(Modifier.size(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = "Отмечено", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = listOfNotNull(outcome.cellValue.takeIf { it.isNotBlank() }, outcome.name)
-                        .joinToString(" — "),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun TableMenu(
@@ -673,6 +658,13 @@ private fun PromptHint.toSlotInfo(): SlotInfo? = when (this) {
 }
 
 internal fun HomeUiState.snackMessage(): String? = when (val outcome = (this as? HomeUiState.Active)?.lastOutcome) {
+    is SearchOutcome.Marked -> {
+        val tail = listOfNotNull(
+            outcome.cellValue.takeIf { it.isNotBlank() },
+            outcome.name?.takeIf { it.isNotBlank() },
+        ).joinToString(" — ")
+        if (tail.isEmpty()) "Отмечено" else "Отмечено: $tail"
+    }
     is SearchOutcome.NotFound -> "Не нашли: ${outcome.spokenText}"
     is SearchOutcome.Failed -> outcome.message
     SearchOutcome.NeedsSettings -> "Сначала настройте таблицу в меню «⋮»"

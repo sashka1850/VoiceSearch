@@ -122,7 +122,12 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.hilt.work)
     ksp(libs.hilt.compiler)
+    ksp(libs.androidx.hilt.compiler)
+
+    // WorkManager — debounced auto-sync to Yandex.Disk runs here.
+    implementation(libs.androidx.work.runtime.ktx)
 
     // Lottie
     implementation(libs.lottie.compose)

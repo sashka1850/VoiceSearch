@@ -5,8 +5,12 @@ import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import com.voicesearch.core.data.db.VoiceSearchDatabase
+import com.voicesearch.core.data.mapper.toEntity
+import com.voicesearch.core.domain.model.PrefixHint
 import com.voicesearch.core.domain.model.Table
+import com.voicesearch.core.domain.model.TableSettings
 import com.voicesearch.core.domain.model.TableSource
+import com.voicesearch.core.domain.sync.AutoSyncTrigger
 import com.voicesearch.core.domain.time.Clock
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -29,6 +33,8 @@ class TableRepositoryImplTest {
     private lateinit var repository: TableRepositoryImpl
     private val json = Json { ignoreUnknownKeys = true }
     private var fixedClock: Long = 1_700_000_000_000L
+    private val syncRequests = mutableListOf<String>()
+    private val recordingTrigger = AutoSyncTrigger { tableId -> syncRequests += tableId }
 
     @Before
     fun setUp() {
@@ -40,9 +46,12 @@ class TableRepositoryImplTest {
             database = db,
             tableDao = db.tableDao(),
             rowDao = db.tableRowDao(),
+            settingsDao = db.tableSettingsDao(),
             json = json,
             clock = Clock { fixedClock },
+            autoSyncTrigger = recordingTrigger,
         )
+        syncRequests.clear()
     }
 
     @After
@@ -129,6 +138,39 @@ class TableRepositoryImplTest {
     }
 
     @Test
+    fun `setRowMarked does NOT request sync when autoSync is off`() = runTest {
+        repository.save(sampleTable("t1"), rows = listOf(listOf("a")))
+        db.tableSettingsDao().upsert(settingsFor("t1", autoSync = false))
+        val rowId = repository.getRows("t1").first().id
+
+        repository.setRowMarked(rowId, marked = true, markedAt = 1L)
+
+        assertThat(syncRequests).isEmpty()
+    }
+
+    @Test
+    fun `setRowMarked requests sync when autoSync is on`() = runTest {
+        repository.save(sampleTable("t1"), rows = listOf(listOf("a")))
+        db.tableSettingsDao().upsert(settingsFor("t1", autoSync = true))
+        val rowId = repository.getRows("t1").first().id
+
+        repository.setRowMarked(rowId, marked = true, markedAt = 1L)
+
+        assertThat(syncRequests).containsExactly("t1")
+    }
+
+    @Test
+    fun `setRowsMarked requests one sync per batch`() = runTest {
+        repository.save(sampleTable("t1"), rows = listOf(listOf("a"), listOf("b"), listOf("c")))
+        db.tableSettingsDao().upsert(settingsFor("t1", autoSync = true))
+        val rows = repository.getRows("t1")
+
+        repository.setRowsMarked(rows.map { it.id }, marked = true, markedAt = 1L)
+
+        assertThat(syncRequests).containsExactly("t1")
+    }
+
+    @Test
     fun `saving same id replaces rows`() = runTest {
         val table = sampleTable("t1")
         repository.save(table, rows = listOf(listOf("old1"), listOf("old2"), listOf("old3")))
@@ -148,4 +190,15 @@ class TableRepositoryImplTest {
         headers = listOf("col1", "col2"),
         rowCount = 0,
     )
+
+    private fun settingsFor(tableId: String, autoSync: Boolean) = TableSettings(
+        tableId = tableId,
+        searchColumnIndex = 0,
+        markColumnIndex = 1,
+        nameColumnIndex = 0,
+        startRowIndex = 0,
+        successMarker = "Есть",
+        prefix = PrefixHint.FullMatch,
+        autoSync = autoSync,
+    ).toEntity(json)
 }

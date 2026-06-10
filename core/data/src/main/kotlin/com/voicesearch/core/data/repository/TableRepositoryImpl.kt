@@ -7,9 +7,11 @@ import com.voicesearch.core.data.db.dao.TableRowDao
 import com.voicesearch.core.data.mapper.buildRowEntity
 import com.voicesearch.core.data.mapper.toDomain
 import com.voicesearch.core.data.mapper.toEntity
+import com.voicesearch.core.data.db.dao.TableSettingsDao
 import com.voicesearch.core.domain.model.Table
 import com.voicesearch.core.domain.repository.TableRepository
 import com.voicesearch.core.domain.repository.TableRow
+import com.voicesearch.core.domain.sync.AutoSyncTrigger
 import com.voicesearch.core.domain.time.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,8 +24,10 @@ internal class TableRepositoryImpl @Inject constructor(
     private val database: VoiceSearchDatabase,
     private val tableDao: TableDao,
     private val rowDao: TableRowDao,
+    private val settingsDao: TableSettingsDao,
     private val json: Json,
     private val clock: Clock,
+    private val autoSyncTrigger: AutoSyncTrigger,
 ) : TableRepository {
 
     override fun observeAll(): Flow<List<Table>> =
@@ -67,10 +71,25 @@ internal class TableRepositoryImpl @Inject constructor(
 
     override suspend fun setRowMarked(rowId: Long, marked: Boolean, markedAt: Long?) {
         rowDao.setMarked(rowId, marked, markedAt)
+        val tableId = rowDao.getById(rowId)?.tableId ?: return
+        notifyMaybeAutoSync(tableId)
     }
 
     override suspend fun setRowsMarked(rowIds: Collection<Long>, marked: Boolean, markedAt: Long?) {
         if (rowIds.isEmpty()) return
         rowDao.setMarkedAll(rowIds, marked, markedAt)
+        // All ids in a single batch belong to the same table (the multi-match flow
+        // only ever marks from one table). Take the first to fetch its parent id.
+        val tableId = rowDao.getById(rowIds.first())?.tableId ?: return
+        notifyMaybeAutoSync(tableId)
+    }
+
+    /**
+     * Only nudge the sync trigger when the table's settings have `autoSync = true`.
+     * Settings missing → user hasn't configured yet → no sync.
+     */
+    private suspend fun notifyMaybeAutoSync(tableId: String) {
+        val autoSync = settingsDao.get(tableId)?.autoSync == true
+        if (autoSync) autoSyncTrigger.requestSync(tableId)
     }
 }

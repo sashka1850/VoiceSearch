@@ -14,5 +14,8 @@ internal object Routes {
     /** App-level settings: theme + about. */
     const val APP_SETTINGS = "app_settings"
 
+    /** First-launch intro slides. */
+    const val ONBOARDING = "onboarding"
+
     fun settings(tableId: String): String = "settings/$tableId"
 }

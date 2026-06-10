@@ -1,6 +1,9 @@
 package com.voicesearch.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -10,6 +13,8 @@ import androidx.navigation.navArgument
 import com.voicesearch.app.feature.imports.ui.ImportScreen
 import com.voicesearch.app.feature.tablesettings.ui.TableSettingsScreen
 import com.voicesearch.app.ui.home.HomeScreen
+import com.voicesearch.app.ui.onboarding.OnboardingScreen
+import com.voicesearch.app.ui.onboarding.OnboardingViewModel
 import com.voicesearch.app.ui.settings.SettingsScreen
 
 /**
@@ -25,9 +30,19 @@ import com.voicesearch.app.ui.settings.SettingsScreen
 fun VoiceSearchNavHost(
     navController: NavHostController = rememberNavController(),
 ) {
+    // Pick start destination based on the persisted "seen onboarding" flag.
+    // Null = first emission pending → stay on HOME (safe default); the flag
+    // is materialised in DataStore on first write, and subsequent launches
+    // resolve cleanly. New installs hit ONBOARDING.
+    val onboardingVm: OnboardingViewModel = hiltViewModel()
+    val seen by onboardingVm.hasSeenOnboarding.collectAsStateWithLifecycle()
+    val start = when (seen) {
+        false -> Routes.ONBOARDING
+        else -> Routes.HOME
+    }
     NavHost(
         navController = navController,
-        startDestination = Routes.HOME,
+        startDestination = start,
     ) {
         composable(Routes.HOME) {
             HomeScreen(
@@ -60,6 +75,15 @@ fun VoiceSearchNavHost(
         }
         composable(Routes.APP_SETTINGS) {
             SettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.ONBOARDING) {
+            OnboardingScreen(
+                onFinished = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.ONBOARDING) { inclusive = true }
+                    }
+                },
+            )
         }
     }
 }

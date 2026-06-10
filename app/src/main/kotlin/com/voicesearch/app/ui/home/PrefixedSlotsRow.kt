@@ -57,8 +57,8 @@ fun PrefixedSlotsRow(
     val monoStyle = TextStyle(
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
-        letterSpacing = 1.sp,
+        fontSize = 22.sp,
+        letterSpacing = 0.sp,
     )
 
     Row(
@@ -68,7 +68,7 @@ fun PrefixedSlotsRow(
     ) {
         if (prefix.isNotEmpty()) {
             Text(text = prefix, style = monoStyle, color = prefixColor)
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(4.dp))
         }
         repeat(slotCount) { i ->
             val char = displayed.getOrNull(i)
@@ -79,7 +79,7 @@ fun PrefixedSlotsRow(
                 filledColor = filledColor,
                 placeholderColor = placeholderColor,
                 animateReveal = animateReveal,
-                modifier = Modifier.padding(horizontal = 4.dp),
+                modifier = Modifier.padding(horizontal = 1.dp),
             )
         }
     }

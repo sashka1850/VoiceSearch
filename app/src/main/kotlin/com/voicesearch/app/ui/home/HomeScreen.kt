@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TableChart
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -83,6 +84,7 @@ import com.voicesearch.core.ui.theme.VoiceSearchTheme
 fun HomeScreen(
     onAddTable: () -> Unit,
     onOpenSettings: (tableId: String) -> Unit,
+    onOpenAppSettings: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -135,6 +137,7 @@ fun HomeScreen(
     HomeScreenContent(
         onAddTable = onAddTable,
         onOpenSettings = { activeTableId?.let(onOpenSettings) },
+        onOpenAppSettings = onOpenAppSettings,
         state = state,
         callbacks = HomeScreenCallbacks(
             onMicPress = ::onMicPress,
@@ -179,6 +182,7 @@ data class HomeScreenCallbacks(
 private fun HomeScreenContent(
     onAddTable: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAppSettings: () -> Unit,
     state: HomeUiState,
     callbacks: HomeScreenCallbacks = HomeScreenCallbacks(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
@@ -193,6 +197,7 @@ private fun HomeScreenContent(
                             yandexAuthenticated = state.yandexAuthenticated,
                             onShare = callbacks.onShare,
                             onOpenSettings = onOpenSettings,
+                            onOpenAppSettings = onOpenAppSettings,
                             onConnectYandex = callbacks.onConnectYandex,
                             onSyncNow = callbacks.onSyncNow,
                             onSignOutYandex = callbacks.onSignOutYandex,
@@ -598,6 +603,7 @@ private fun TableMenu(
     yandexAuthenticated: Boolean,
     onShare: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAppSettings: () -> Unit,
     onConnectYandex: () -> Unit,
     onSyncNow: () -> Unit,
     onSignOutYandex: () -> Unit,
@@ -617,6 +623,11 @@ private fun TableMenu(
                 text = { Text("Настройки таблицы") },
                 leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
                 onClick = { open = false; onOpenSettings() },
+            )
+            DropdownMenuItem(
+                text = { Text("Настройки приложения") },
+                leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null) },
+                onClick = { open = false; onOpenAppSettings() },
             )
             if (yandexAuthenticated) {
                 DropdownMenuItem(
@@ -676,7 +687,12 @@ internal fun HomeUiState.snackMessage(): String? = when (val outcome = (this as?
 @Composable
 private fun HomeScreenEmptyPreview() {
     VoiceSearchTheme {
-        HomeScreenContent(onAddTable = {}, onOpenSettings = {}, state = HomeUiState.Empty)
+        HomeScreenContent(
+            onAddTable = {},
+            onOpenSettings = {},
+            onOpenAppSettings = {},
+            state = HomeUiState.Empty,
+        )
     }
 }
 
@@ -688,6 +704,7 @@ private fun HomeScreenDockPreview() {
         HomeScreenContent(
             onAddTable = {},
             onOpenSettings = {},
+            onOpenAppSettings = {},
             state = HomeUiState.Active(
                 tableName = "Прайс поставщика",
                 tableId = "t1",

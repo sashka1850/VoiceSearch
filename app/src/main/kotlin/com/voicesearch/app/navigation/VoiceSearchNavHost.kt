@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import com.voicesearch.app.feature.imports.ui.ImportScreen
 import com.voicesearch.app.feature.tablesettings.ui.TableSettingsScreen
 import com.voicesearch.app.ui.home.HomeScreen
+import com.voicesearch.app.ui.settings.SettingsScreen
 
 /**
  * Top-level navigation graph.
@@ -32,6 +33,7 @@ fun VoiceSearchNavHost(
             HomeScreen(
                 onAddTable = { navController.navigate(Routes.IMPORT) },
                 onOpenSettings = { tableId -> navController.navigate(Routes.settings(tableId)) },
+                onOpenAppSettings = { navController.navigate(Routes.APP_SETTINGS) },
             )
         }
         composable(Routes.IMPORT) {
@@ -55,6 +57,9 @@ fun VoiceSearchNavHost(
                     navController.popBackStack(route = Routes.HOME, inclusive = false)
                 },
             )
+        }
+        composable(Routes.APP_SETTINGS) {
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

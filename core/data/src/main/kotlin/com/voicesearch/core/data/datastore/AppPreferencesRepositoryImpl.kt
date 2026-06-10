@@ -2,6 +2,7 @@ package com.voicesearch.core.data.datastore
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.voicesearch.core.domain.repository.AppPreferencesRepository
@@ -19,6 +20,7 @@ internal class AppPreferencesRepositoryImpl @Inject constructor(
     private object Keys {
         val CURRENT_TABLE_ID = stringPreferencesKey("current_table_id")
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val HAS_SEEN_ONBOARDING = booleanPreferencesKey("has_seen_onboarding")
     }
 
     override val currentTableId: Flow<String?> =
@@ -39,5 +41,12 @@ internal class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setThemeMode(mode: ThemeMode) {
         store.edit { it[Keys.THEME_MODE] = mode.name }
+    }
+
+    override val hasSeenOnboarding: Flow<Boolean> =
+        store.data.map { it[Keys.HAS_SEEN_ONBOARDING] ?: false }
+
+    override suspend fun setHasSeenOnboarding(seen: Boolean) {
+        store.edit { it[Keys.HAS_SEEN_ONBOARDING] = seen }
     }
 }

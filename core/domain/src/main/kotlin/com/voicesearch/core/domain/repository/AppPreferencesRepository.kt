@@ -13,6 +13,9 @@ interface AppPreferencesRepository {
 
     val themeMode: Flow<ThemeMode>
     suspend fun setThemeMode(mode: ThemeMode)
+
+    val hasSeenOnboarding: Flow<Boolean>
+    suspend fun setHasSeenOnboarding(seen: Boolean)
 }
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }

@@ -5,6 +5,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,8 +39,10 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SyncDisabled
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.CircularProgressIndicator
@@ -76,6 +86,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voicesearch.core.ui.components.ActionFab
 import com.voicesearch.core.ui.components.PrimaryButton
+import com.voicesearch.core.ui.components.rememberTableGridColor
+import com.voicesearch.core.ui.components.tableGridBackground
 import com.voicesearch.core.ui.theme.LocalElevation
 import com.voicesearch.core.ui.theme.VoiceSearchTheme
 
@@ -154,6 +166,7 @@ fun HomeScreen(
             onSignOutYandex = viewModel::signOutYandex,
             onYandexCodeSubmit = viewModel::submitYandexCode,
             onYandexCodeCancel = viewModel::cancelYandexAuth,
+            onToggleAutoSync = viewModel::toggleAutoSync,
         ),
         snackbar = snackbar,
     )
@@ -175,8 +188,10 @@ data class HomeScreenCallbacks(
     val onSignOutYandex: () -> Unit = {},
     val onYandexCodeSubmit: (String) -> Unit = {},
     val onYandexCodeCancel: () -> Unit = {},
+    val onToggleAutoSync: () -> Unit = {},
 )
 
+@Suppress("LongMethod") // Compose entry-point that wires Scaffold + topbar + content + dialogs.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreenContent(
@@ -193,6 +208,25 @@ private fun HomeScreenContent(
                 TopAppBar(
                     title = { Text(text = state.tableName, style = MaterialTheme.typography.titleLarge) },
                     actions = {
+                        IconButton(onClick = callbacks.onToggleAutoSync) {
+                            Icon(
+                                imageVector = if (state.autoSyncEnabled) {
+                                    Icons.Filled.Sync
+                                } else {
+                                    Icons.Outlined.SyncDisabled
+                                },
+                                contentDescription = if (state.autoSyncEnabled) {
+                                    "Авто-синхронизация включена"
+                                } else {
+                                    "Авто-синхронизация выключена"
+                                },
+                                tint = if (state.autoSyncEnabled) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                         TableMenu(
                             yandexAuthenticated = state.yandexAuthenticated,
                             onShare = callbacks.onShare,
@@ -213,7 +247,13 @@ private fun HomeScreenContent(
         snackbarHost = {},
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        val gridColor = rememberTableGridColor()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .tableGridBackground(lineColor = gridColor),
+        ) {
             when (state) {
                 HomeUiState.Empty -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     EmptyState(onAddTable = onAddTable)
@@ -389,34 +429,61 @@ private fun ActiveDock(
                     status = status,
                 )
 
-                if (typing) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        TextButton(onClick = callbacks.onManualInputDismiss) {
-                            Text("Свернуть")
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                // Keypad slides up from the bottom (250 ms tween) when the
+                // user opens manual input; on close it slides back down. Same
+                // animation in reverse for the 3-button control cluster — they
+                // exit the screen via the bottom edge so visually the dock
+                // smoothly "swaps" content rather than popping.
+                AnimatedVisibility(
+                    visible = typing,
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = tween(DOCK_ANIMATION_MS),
+                    ) + expandVertically(animationSpec = tween(DOCK_ANIMATION_MS)) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = tween(DOCK_ANIMATION_MS),
+                    ) + shrinkVertically(animationSpec = tween(DOCK_ANIMATION_MS)) + fadeOut(),
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = callbacks.onManualInputDismiss) {
+                                Text("Свернуть")
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                            }
+                        }
+                        if (slotInfo != null) {
+                            NumericKeypad(
+                                onKey = { key ->
+                                    appendCapped(state.manualInput.text, key, slotInfo.slots, callbacks.onManualInputChange)
+                                },
+                                onBackspace = { callbacks.onManualInputChange(state.manualInput.text.dropLast(1)) },
+                                onDone = callbacks.onManualInputSubmit,
+                                canDone = state.manualInput.text.length == slotInfo.slots,
+                            )
+                        } else {
+                            SystemKeyboardField(
+                                text = state.manualInput.text,
+                                onChange = callbacks.onManualInputChange,
+                                onSubmit = callbacks.onManualInputSubmit,
+                            )
                         }
                     }
-                    if (slotInfo != null) {
-                        NumericKeypad(
-                            onKey = { key ->
-                                appendCapped(state.manualInput.text, key, slotInfo.slots, callbacks.onManualInputChange)
-                            },
-                            onBackspace = { callbacks.onManualInputChange(state.manualInput.text.dropLast(1)) },
-                            onDone = callbacks.onManualInputSubmit,
-                            canDone = state.manualInput.text.length == slotInfo.slots,
-                        )
-                    } else {
-                        // FullValue tables need the full system keyboard for arbitrary text.
-                        SystemKeyboardField(
-                            text = state.manualInput.text,
-                            onChange = callbacks.onManualInputChange,
-                            onSubmit = callbacks.onManualInputSubmit,
-                        )
-                    }
-                } else {
+                }
+                AnimatedVisibility(
+                    visible = !typing,
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = tween(DOCK_ANIMATION_MS),
+                    ) + expandVertically(animationSpec = tween(DOCK_ANIMATION_MS)) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = tween(DOCK_ANIMATION_MS),
+                    ) + shrinkVertically(animationSpec = tween(DOCK_ANIMATION_MS)) + fadeOut(),
+                ) {
                     DockControls(
                         onKeyboard = callbacks.onToggleManualInput,
                         onMicPress = callbacks.onMicPress,
@@ -660,6 +727,9 @@ private fun TableMenu(
  */
 private const val NOW_TICK_MS = 15_000L
 
+/** Slide / expand timing for swapping the dock controls ↔ keypad. */
+private const val DOCK_ANIMATION_MS = 250
+
 private data class SlotInfo(val prefix: String, val slots: Int)
 
 private fun PromptHint.toSlotInfo(): SlotInfo? = when (this) {
@@ -716,6 +786,7 @@ private fun HomeScreenDockPreview() {
                 voiceTranscript = "204517",
                 awaitingYandexCode = false,
                 yandexCodeSubmitting = false,
+                autoSyncEnabled = false,
                 info = com.voicesearch.core.domain.model.TableInfo(
                     tableId = "t1",
                     totalRows = 1547,

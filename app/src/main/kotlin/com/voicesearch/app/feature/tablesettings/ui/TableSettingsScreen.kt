@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -133,9 +134,9 @@ fun TableSettingsScreen(
                 )
                 MarkerCard(value = state.successMarker, onChange = viewModel::onSuccessMarkerChange)
                 StartRowCard(value = state.startRowIndex, onChange = viewModel::onStartRowChange)
-                if (state.autoSyncSupported) {
-                    AutoSyncCard(enabled = state.autoSync, onChange = viewModel::onAutoSyncChange)
-                }
+                // Auto-sync toggle is now on the home screen (top-right) so it's
+                // reachable in 1 tap regardless of the source — and consistent for
+                // Yandex.Disk and local tables alike.
                 Spacer(Modifier.height(72.dp)) // room for sticky save button
             }
 
@@ -146,6 +147,7 @@ fun TableSettingsScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(16.dp),
             )
         }
@@ -280,21 +282,6 @@ private fun StartRowCard(value: Int, onChange: (Int) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
         )
-    }
-}
-
-@Composable
-private fun AutoSyncCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
-    SettingsCard(label = "Авто-синхронизация с Я.Диском") {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "Загружать изменения после каждой отметки",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(checked = enabled, onCheckedChange = onChange)
-        }
     }
 }
 

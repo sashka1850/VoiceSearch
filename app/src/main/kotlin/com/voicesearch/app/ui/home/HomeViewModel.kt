@@ -150,6 +150,7 @@ class HomeViewModel @Inject constructor(
                 awaitingYandexCode = codeEntry.first,
                 yandexCodeSubmitting = codeEntry.second,
                 info = info,
+                autoSyncEnabled = settings?.autoSync == true,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HomeUiState.Empty)
@@ -293,6 +294,21 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             yandexAuthRepository.clear()
             lastOutcome.value = SearchOutcome.Failed("Вышли из Яндекса")
+        }
+    }
+
+    /**
+     * Flip auto-sync for the active table. Persists into TableSettings, so the
+     * existing repository → AutoSyncTrigger → WorkManager pipeline picks it up
+     * on the next mark.
+     */
+    fun toggleAutoSync() {
+        val current = activeSettings.value ?: run {
+            lastOutcome.value = SearchOutcome.NeedsSettings
+            return
+        }
+        viewModelScope.launch {
+            settingsRepository.save(current.copy(autoSync = !current.autoSync))
         }
     }
 

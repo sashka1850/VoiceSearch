@@ -30,6 +30,8 @@ sealed interface HomeUiState {
         val yandexCodeSubmitting: Boolean = false,
         /** Live row counts + sync status; null while the first emission lands. */
         val info: TableInfo? = null,
+        /** Current TableSettings.autoSync flag — drives the top-right toggle. */
+        val autoSyncEnabled: Boolean = false,
     ) : HomeUiState
 }
 

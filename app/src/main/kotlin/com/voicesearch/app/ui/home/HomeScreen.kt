@@ -97,6 +97,7 @@ fun HomeScreen(
     onAddTable: () -> Unit,
     onOpenSettings: (tableId: String) -> Unit,
     onOpenAppSettings: () -> Unit,
+    onOpenTablesList: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -158,6 +159,7 @@ fun HomeScreen(
         onAddTable = viewModel::requestImport,
         onOpenSettings = { activeTableId?.let(onOpenSettings) },
         onOpenAppSettings = onOpenAppSettings,
+        onOpenTablesList = onOpenTablesList,
         state = state,
         callbacks = HomeScreenCallbacks(
             onMicPress = ::onMicPress,
@@ -214,6 +216,7 @@ private fun HomeScreenContent(
     onAddTable: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAppSettings: () -> Unit,
+    onOpenTablesList: () -> Unit,
     state: HomeUiState,
     callbacks: HomeScreenCallbacks = HomeScreenCallbacks(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
@@ -248,6 +251,7 @@ private fun HomeScreenContent(
                             onShare = callbacks.onShare,
                             onOpenSettings = onOpenSettings,
                             onOpenAppSettings = onOpenAppSettings,
+                            onOpenTablesList = onOpenTablesList,
                             onConnectYandex = callbacks.onConnectYandex,
                             onSyncNow = callbacks.onSyncNow,
                             onSignOutYandex = callbacks.onSignOutYandex,
@@ -748,12 +752,14 @@ private fun EmptyState(onAddTable: () -> Unit) {
 }
 
 
+@Suppress("LongParameterList") // Menu wiring; each callback maps to one item.
 @Composable
 private fun TableMenu(
     yandexAuthenticated: Boolean,
     onShare: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAppSettings: () -> Unit,
+    onOpenTablesList: () -> Unit,
     onConnectYandex: () -> Unit,
     onSyncNow: () -> Unit,
     onSignOutYandex: () -> Unit,
@@ -764,6 +770,11 @@ private fun TableMenu(
             Icon(Icons.Default.MoreVert, contentDescription = "Меню")
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Мои таблицы") },
+                leadingIcon = { Icon(Icons.Outlined.TableChart, contentDescription = null) },
+                onClick = { open = false; onOpenTablesList() },
+            )
             DropdownMenuItem(
                 text = { Text("Поделиться файлом") },
                 leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
@@ -844,6 +855,7 @@ private fun HomeScreenEmptyPreview() {
             onAddTable = {},
             onOpenSettings = {},
             onOpenAppSettings = {},
+            onOpenTablesList = {},
             state = HomeUiState.Empty,
         )
     }
@@ -858,6 +870,7 @@ private fun HomeScreenDockPreview() {
             onAddTable = {},
             onOpenSettings = {},
             onOpenAppSettings = {},
+            onOpenTablesList = {},
             state = HomeUiState.Active(
                 tableName = "Прайс поставщика",
                 tableId = "t1",

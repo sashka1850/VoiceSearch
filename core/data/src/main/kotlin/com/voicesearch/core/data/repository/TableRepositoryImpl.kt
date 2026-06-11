@@ -126,6 +126,9 @@ internal class TableRepositoryImpl @Inject constructor(
             }
         }
 
+    override fun observeMarkedCount(tableId: String): Flow<Int> =
+        rowDao.countMarked(tableId)
+
     override suspend fun recordSyncSuccess(tableId: String, attemptAt: Long, successAt: Long) {
         tableDao.recordSyncSuccess(tableId, attemptAt, successAt)
     }

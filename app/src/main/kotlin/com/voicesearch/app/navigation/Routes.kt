@@ -17,5 +17,8 @@ internal object Routes {
     /** First-launch intro slides. */
     const val ONBOARDING = "onboarding"
 
+    /** List of imported tables — switch active or delete. */
+    const val TABLES_LIST = "tables_list"
+
     fun settings(tableId: String): String = "settings/$tableId"
 }

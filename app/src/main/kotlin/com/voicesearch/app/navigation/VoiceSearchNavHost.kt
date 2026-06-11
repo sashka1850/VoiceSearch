@@ -16,6 +16,7 @@ import com.voicesearch.app.ui.home.HomeScreen
 import com.voicesearch.app.ui.onboarding.OnboardingScreen
 import com.voicesearch.app.ui.onboarding.OnboardingViewModel
 import com.voicesearch.app.ui.settings.SettingsScreen
+import com.voicesearch.app.ui.tableslist.TablesListScreen
 
 /**
  * Top-level navigation graph.
@@ -49,6 +50,7 @@ fun VoiceSearchNavHost(
                 onAddTable = { navController.navigate(Routes.IMPORT) },
                 onOpenSettings = { tableId -> navController.navigate(Routes.settings(tableId)) },
                 onOpenAppSettings = { navController.navigate(Routes.APP_SETTINGS) },
+                onOpenTablesList = { navController.navigate(Routes.TABLES_LIST) },
             )
         }
         composable(Routes.IMPORT) {
@@ -83,6 +85,12 @@ fun VoiceSearchNavHost(
                         popUpTo(Routes.ONBOARDING) { inclusive = true }
                     }
                 },
+            )
+        }
+        composable(Routes.TABLES_LIST) {
+            TablesListScreen(
+                onBack = { navController.popBackStack() },
+                onTableChosen = { navController.popBackStack() },
             )
         }
     }

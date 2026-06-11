@@ -47,6 +47,9 @@ interface TableRepository {
     /** Live counts + sync status for the info card on the home screen. */
     fun observeInfo(tableId: String): Flow<TableInfo?>
 
+    /** Lightweight marked-row count for the "My tables" list. */
+    fun observeMarkedCount(tableId: String): Flow<Int>
+
     suspend fun recordSyncSuccess(tableId: String, attemptAt: Long, successAt: Long)
     suspend fun recordSyncFailure(tableId: String, attemptAt: Long, error: String)
     suspend fun observeSyncStatus(tableId: String): TableSyncStatus?

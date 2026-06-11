@@ -53,6 +53,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voicesearch.core.domain.model.PrefixHint
 import com.voicesearch.core.ui.components.PrimaryButton
+import com.voicesearch.core.ui.components.rememberTableGridColor
+import com.voicesearch.core.ui.components.tableGridBackground
 import com.voicesearch.core.ui.theme.LocalElevation
 
 @Suppress("LongMethod") // Compose entry-point that wires Scaffold + body; extracted parts already inlined as composables.
@@ -104,7 +106,13 @@ fun TableSettingsScreen(
             return@Scaffold
         }
 
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        val gridColor = rememberTableGridColor()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .tableGridBackground(lineColor = gridColor),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()

@@ -46,7 +46,10 @@ import javax.inject.Inject
  * engine while the user holds the mic, and resolves the spoken text against
  * the table's search column.
  */
-@Suppress("LongParameterList") // Wiring-time ViewModel; each dep is a real collaborator.
+@Suppress(
+    "LongParameterList", // Wiring-time ViewModel; each dep is a real collaborator.
+    "TooManyFunctions", // Home is the central screen; consolidating intents one place beats splitting it.
+)
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -92,6 +95,13 @@ class HomeViewModel @Inject constructor(
     /** Pair of (dialog open?, exchange in flight?). Drives the OOB code-entry dialog. */
     private val yandexCodeEntry = MutableStateFlow(false to false)
 
+    /** Drives the "current table has unsynced marks" confirmation. */
+    private val pendingImport = MutableStateFlow<PendingImport?>(null)
+
+    /** Fires when the user is cleared to navigate to the import screen. */
+    private val _navigateToImportEvents = Channel<Unit>(capacity = Channel.BUFFERED)
+    val navigateToImportEvents: Flow<Unit> = _navigateToImportEvents.receiveAsFlow()
+
     /**
      * One-shot side-effect channel for the share intent. UI collects via [shareEvents].
      * Buffered so a rapid "press → press" doesn't drop a request while the previous
@@ -117,6 +127,7 @@ class HomeViewModel @Inject constructor(
             voiceTranscript,
             yandexCodeEntry,
             activeTableInfo,
+            pendingImport,
         ),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
@@ -133,6 +144,8 @@ class HomeViewModel @Inject constructor(
         val codeEntry = values[7] as Pair<Boolean, Boolean>
         @Suppress("UNCHECKED_CAST")
         val info = values[8] as TableInfo?
+        @Suppress("UNCHECKED_CAST")
+        val pending = values[9] as PendingImport?
 
         if (table == null) {
             HomeUiState.Empty
@@ -151,6 +164,7 @@ class HomeViewModel @Inject constructor(
                 yandexCodeSubmitting = codeEntry.second,
                 info = info,
                 autoSyncEnabled = settings?.autoSync == true,
+                pendingImport = pending,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HomeUiState.Empty)
@@ -296,6 +310,62 @@ class HomeViewModel @Inject constructor(
             lastOutcome.value = SearchOutcome.Failed("Вышли из Яндекса")
         }
     }
+
+    // region Import confirmation
+
+    /**
+     * Called when the user presses the "+" FAB. If the active table has marks
+     * that haven't reached Yandex yet, we surface a confirmation dialog with
+     * sync / share / proceed options. Otherwise we navigate straight to the
+     * import screen.
+     */
+    fun requestImport() {
+        val info = activeTableInfo.value
+        val table = activeTable.value
+        val unsynced = info?.let { it.markedRows - it.syncedMarkedRows } ?: 0
+        if (table == null || unsynced <= 0) {
+            _navigateToImportEvents.trySend(Unit)
+            return
+        }
+        pendingImport.value = PendingImport(tableName = table.name, unsyncedCount = unsynced)
+    }
+
+    fun cancelImport() {
+        pendingImport.value = null
+    }
+
+    fun proceedImportWithoutSave() {
+        pendingImport.value = null
+        _navigateToImportEvents.trySend(Unit)
+    }
+
+    /** Triggers a sync of the current table; navigates on success, snackbar on failure. */
+    fun syncBeforeImport() {
+        val tableId = activeTable.value?.id ?: return
+        pendingImport.value = null
+        viewModelScope.launch {
+            when (val result = uploadTableUseCase.upload(tableId)) {
+                is UploadTableUseCase.Result.Success -> {
+                    lastOutcome.value = SearchOutcome.Failed("Загружено на Я.Диск")
+                    _navigateToImportEvents.trySend(Unit)
+                }
+                UploadTableUseCase.Result.NotAuthenticated -> {
+                    lastOutcome.value = SearchOutcome.Failed("Сначала войдите в Я.Диск")
+                }
+                is UploadTableUseCase.Result.Failure -> {
+                    lastOutcome.value = SearchOutcome.Failed(result.message)
+                }
+            }
+        }
+    }
+
+    /** Fires the share intent; stays on Home so the user can re-tap "+" after. */
+    fun shareBeforeImport() {
+        pendingImport.value = null
+        shareCurrentTable()
+    }
+
+    // endregion
 
     /**
      * Flip auto-sync for the active table. Persists into TableSettings, so the

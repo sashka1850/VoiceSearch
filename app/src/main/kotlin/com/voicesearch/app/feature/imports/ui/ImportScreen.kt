@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voicesearch.core.ui.theme.LocalElevation
+import com.voicesearch.core.ui.components.rememberTableGridColor
+import com.voicesearch.core.ui.components.tableGridBackground
 import com.voicesearch.core.ui.theme.VoiceSearchTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,7 +100,13 @@ fun ImportScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        val gridColor = rememberTableGridColor()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .tableGridBackground(lineColor = gridColor),
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()

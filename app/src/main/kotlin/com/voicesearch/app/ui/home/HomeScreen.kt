@@ -117,6 +117,12 @@ fun HomeScreen(
         }
     }
 
+    // ViewModel gates navigation to the import screen so it can interpose a
+    // "you have unsynced marks" confirmation when needed.
+    LaunchedEffect(Unit) {
+        viewModel.navigateToImportEvents.collect { onAddTable() }
+    }
+
     val micPermission = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -147,7 +153,9 @@ fun HomeScreen(
     val activeTableId = (state as? HomeUiState.Active)?.tableId
 
     HomeScreenContent(
-        onAddTable = onAddTable,
+        // FAB now goes through the ViewModel — direct nav happens only after
+        // the unsynced-marks confirmation (if any) is resolved.
+        onAddTable = viewModel::requestImport,
         onOpenSettings = { activeTableId?.let(onOpenSettings) },
         onOpenAppSettings = onOpenAppSettings,
         state = state,
@@ -167,6 +175,10 @@ fun HomeScreen(
             onYandexCodeSubmit = viewModel::submitYandexCode,
             onYandexCodeCancel = viewModel::cancelYandexAuth,
             onToggleAutoSync = viewModel::toggleAutoSync,
+            onCancelImport = viewModel::cancelImport,
+            onProceedImportWithoutSave = viewModel::proceedImportWithoutSave,
+            onSyncBeforeImport = viewModel::syncBeforeImport,
+            onShareBeforeImport = viewModel::shareBeforeImport,
         ),
         snackbar = snackbar,
     )
@@ -189,6 +201,10 @@ data class HomeScreenCallbacks(
     val onYandexCodeSubmit: (String) -> Unit = {},
     val onYandexCodeCancel: () -> Unit = {},
     val onToggleAutoSync: () -> Unit = {},
+    val onCancelImport: () -> Unit = {},
+    val onProceedImportWithoutSave: () -> Unit = {},
+    val onSyncBeforeImport: () -> Unit = {},
+    val onShareBeforeImport: () -> Unit = {},
 )
 
 @Suppress("LongMethod") // Compose entry-point that wires Scaffold + topbar + content + dialogs.
@@ -291,7 +307,74 @@ private fun HomeScreenContent(
                 onCancel = callbacks.onYandexCodeCancel,
             )
         }
+
+        if (state is HomeUiState.Active && state.pendingImport != null) {
+            UnsyncedConfirmDialog(
+                pending = state.pendingImport,
+                yandexAuthenticated = state.yandexAuthenticated,
+                onSync = callbacks.onSyncBeforeImport,
+                onShare = callbacks.onShareBeforeImport,
+                onProceed = callbacks.onProceedImportWithoutSave,
+                onCancel = callbacks.onCancelImport,
+            )
+        }
     }
+}
+
+@Composable
+private fun UnsyncedConfirmDialog(
+    pending: PendingImport,
+    yandexAuthenticated: Boolean,
+    onSync: () -> Unit,
+    onShare: () -> Unit,
+    onProceed: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Несохранённые отметки") },
+        text = {
+            Column {
+                Text(
+                    text = "В таблице «${pending.tableName}» ${pending.unsyncedCount} " +
+                        "отметок не выгружено. Сохранить текущую таблицу перед открытием новой?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onSync,
+                    enabled = yandexAuthenticated,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.CloudUpload, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        text = if (yandexAuthenticated) {
+                            "Синхронизировать с Я.Диском"
+                        } else {
+                            "Войдите в Я.Диск чтобы синхронизировать"
+                        },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onShare,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Поделиться файлом")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onProceed) { Text("Открыть без сохранения") }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text("Отмена") }
+        },
+    )
 }
 
 @Composable
@@ -787,6 +870,7 @@ private fun HomeScreenDockPreview() {
                 awaitingYandexCode = false,
                 yandexCodeSubmitting = false,
                 autoSyncEnabled = false,
+                pendingImport = null,
                 info = com.voicesearch.core.domain.model.TableInfo(
                     tableId = "t1",
                     totalRows = 1547,

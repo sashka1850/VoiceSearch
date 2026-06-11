@@ -32,8 +32,18 @@ sealed interface HomeUiState {
         val info: TableInfo? = null,
         /** Current TableSettings.autoSync flag — drives the top-right toggle. */
         val autoSyncEnabled: Boolean = false,
+        /**
+         * Set when the user taps "+" on a table that has marks newer than the
+         * last successful sync. Drives the confirmation dialog before navigation.
+         */
+        val pendingImport: PendingImport? = null,
     ) : HomeUiState
 }
+
+data class PendingImport(
+    val tableName: String,
+    val unsyncedCount: Int,
+)
 
 /**
  * Keyboard-fallback input. Hidden by default; users summon it from the

@@ -137,7 +137,10 @@ fun TableSettingsScreen(
                 // Auto-sync toggle is now on the home screen (top-right) so it's
                 // reachable in 1 tap regardless of the source — and consistent for
                 // Yandex.Disk and local tables alike.
-                Spacer(Modifier.height(72.dp)) // room for sticky save button
+                // Sticky Save button = 56 dp + 16 dp top/bottom padding + nav-bar
+                // inset on devices with a 3-button bar (~48 dp). Leave 140 dp so
+                // the last card's bottom edge clears the button on all devices.
+                Spacer(Modifier.height(140.dp))
             }
 
             PrimaryButton(

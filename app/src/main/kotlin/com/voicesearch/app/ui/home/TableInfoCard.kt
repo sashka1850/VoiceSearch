@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.TableRows
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +57,7 @@ import java.util.concurrent.TimeUnit
 fun TableInfoCard(
     info: TableInfo,
     nowMillis: Long,
+    yandexAuthenticated: Boolean,
     modifier: Modifier = Modifier,
 ) {
     // Pulse green for exactly GREEN_PULSE_MS after a *new* successful sync
@@ -126,14 +124,12 @@ fun TableInfoCard(
                     label = "Отмечено",
                     value = info.markedRows.toString(),
                 )
-                MetricRow(
-                    icon = if (showError) Icons.Filled.CloudOff else Icons.Outlined.Cloud,
-                    iconTint = when {
-                        showError -> scheme.error
-                        pulsing -> scheme.secondary
-                        else -> scheme.onSurfaceVariant
+                SyncMetricRow(
+                    state = when {
+                        showError || !yandexAuthenticated -> SyncIndicatorState.NoConnection
+                        pulsing -> SyncIndicatorState.Syncing
+                        else -> SyncIndicatorState.Connected
                     },
-                    label = "Синхронизировано",
                     value = info.syncedMarkedRows.toString(),
                     valueColor = when {
                         showError -> scheme.error
@@ -151,6 +147,40 @@ fun TableInfoCard(
                 )
             }
         }
+    }
+}
+
+/**
+ * Same row shape as [MetricRow] but the leading 28dp slot hosts the Lottie
+ * sync indicator instead of a static icon. We don't tint the Lottie — its
+ * own animation carries the state (offline → cloud → spin).
+ */
+@Composable
+private fun SyncMetricRow(
+    state: SyncIndicatorState,
+    value: String,
+    valueColor: Color,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        SyncStatusLottie(
+            state = state,
+            modifier = Modifier.size(28.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = "Синхронизировано",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = valueColor,
+        )
     }
 }
 

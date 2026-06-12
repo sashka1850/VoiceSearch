@@ -480,7 +480,11 @@ private fun ActiveDock(
                 // success notification flies as a top snackbar so it doesn't
                 // shove the card around.
                 if (state.info != null) {
-                    TableInfoCard(info = state.info, nowMillis = nowMillis)
+                    TableInfoCard(
+                        info = state.info,
+                        nowMillis = nowMillis,
+                        yandexAuthenticated = state.yandexAuthenticated,
+                    )
                     Spacer(Modifier.height(16.dp))
                 }
                 if (state.mic == MicState.Idle && state.lastOutcome == null && !typing) {

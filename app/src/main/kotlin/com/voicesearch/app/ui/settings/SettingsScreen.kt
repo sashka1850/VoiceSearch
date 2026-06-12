@@ -1,7 +1,6 @@
 package com.voicesearch.app.ui.settings
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Info
@@ -57,6 +56,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voicesearch.app.BuildConfig
 import com.voicesearch.core.domain.repository.ThemeMode
+import com.voicesearch.core.ui.components.rememberTableGridColor
+import com.voicesearch.core.ui.components.tableGridBackground
 import com.voicesearch.core.ui.theme.LocalElevation
 import java.io.File
 import java.util.ArrayList
@@ -66,6 +67,7 @@ import java.util.ArrayList
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenPrivacyPolicy: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val theme by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -89,100 +91,87 @@ fun SettingsScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Column(
+        val gridColor = rememberTableGridColor()
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .tableGridBackground(lineColor = gridColor),
         ) {
-            SectionCard(label = "Внешний вид", icon = Icons.Outlined.Settings) {
-                ThemeOption(
-                    label = "Системная",
-                    description = "Следует за темой устройства",
-                    icon = Icons.Outlined.SettingsBrightness,
-                    selected = theme == ThemeMode.SYSTEM,
-                    onSelect = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
-                )
-                ThemeOption(
-                    label = "Светлая",
-                    description = null,
-                    icon = Icons.Outlined.LightMode,
-                    selected = theme == ThemeMode.LIGHT,
-                    onSelect = { viewModel.setThemeMode(ThemeMode.LIGHT) },
-                )
-                ThemeOption(
-                    label = "Тёмная",
-                    description = null,
-                    icon = Icons.Outlined.DarkMode,
-                    selected = theme == ThemeMode.DARK,
-                    onSelect = { viewModel.setThemeMode(ThemeMode.DARK) },
-                )
-            }
-
-            SectionCard(label = "Диагностика", icon = Icons.Outlined.BugReport) {
-                if (crashLogs.isEmpty()) {
-                    Text(
-                        text = "Логов падений нет — приложение работает стабильно.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp),
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                SectionCard(label = "Внешний вид", icon = Icons.Outlined.Settings) {
+                    ThemeOption(
+                        label = "Системная",
+                        description = "Следует за темой устройства",
+                        icon = Icons.Outlined.SettingsBrightness,
+                        selected = theme == ThemeMode.SYSTEM,
+                        onSelect = { viewModel.setThemeMode(ThemeMode.SYSTEM) },
                     )
-                } else {
-                    Text(
-                        text = "Сохранено логов: ${crashLogs.size}. " +
-                            "Файлы хранятся локально; можно отправить разработчику для анализа.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp),
+                    ThemeOption(
+                        label = "Светлая",
+                        description = null,
+                        icon = Icons.Outlined.LightMode,
+                        selected = theme == ThemeMode.LIGHT,
+                        onSelect = { viewModel.setThemeMode(ThemeMode.LIGHT) },
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    LinkRow(
-                        label = "Поделиться логами",
-                        icon = Icons.Outlined.Share,
-                        onClick = { shareCrashLogs(context, crashLogs) },
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    LinkRow(
-                        label = "Удалить все логи",
-                        icon = Icons.Outlined.DeleteSweep,
-                        onClick = { showClearDialog = true },
+                    ThemeOption(
+                        label = "Тёмная",
+                        description = null,
+                        icon = Icons.Outlined.DarkMode,
+                        selected = theme == ThemeMode.DARK,
+                        onSelect = { viewModel.setThemeMode(ThemeMode.DARK) },
                     )
                 }
-            }
 
-            SectionCard(label = "О приложении", icon = Icons.Outlined.Info) {
-                AboutRow(
-                    primary = "Версия",
-                    secondary = "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                LinkRow(
-                    label = "Политика конфиденциальности",
-                    icon = Icons.Outlined.PrivacyTip,
-                    onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        }
-                    },
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                LinkRow(
-                    label = "Исходный код на GitHub",
-                    icon = Icons.AutoMirrored.Filled.OpenInNew,
-                    onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(SOURCE_URL))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        }
-                    },
-                )
+                SectionCard(label = "Диагностика", icon = Icons.Outlined.BugReport) {
+                    if (crashLogs.isEmpty()) {
+                        Text(
+                            text = "Логов падений нет — приложение работает стабильно.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    } else {
+                        Text(
+                            text = "Сохранено логов: ${crashLogs.size}. " +
+                                "Файлы хранятся локально; их можно отправить или удалить.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        LinkRow(
+                            label = "Поделиться логами",
+                            leadingIcon = Icons.Outlined.Share,
+                            onClick = { shareCrashLogs(context, crashLogs) },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        LinkRow(
+                            label = "Удалить все логи",
+                            leadingIcon = Icons.Outlined.DeleteSweep,
+                            onClick = { showClearDialog = true },
+                        )
+                    }
+                }
+
+                SectionCard(label = "О приложении", icon = Icons.Outlined.Info) {
+                    AboutRow(
+                        primary = "Версия",
+                        secondary = "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    LinkRow(
+                        label = "Политика конфиденциальности",
+                        leadingIcon = Icons.Outlined.PrivacyTip,
+                        onClick = onOpenPrivacyPolicy,
+                    )
+                }
             }
         }
     }
@@ -330,7 +319,7 @@ private fun AboutRow(primary: String, secondary: String) {
 }
 
 @Composable
-private fun LinkRow(label: String, icon: ImageVector, onClick: () -> Unit) {
+private fun LinkRow(label: String, leadingIcon: ImageVector, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -338,6 +327,13 @@ private fun LinkRow(label: String, icon: ImageVector, onClick: () -> Unit) {
             .padding(vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.size(12.dp))
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
@@ -345,7 +341,7 @@ private fun LinkRow(label: String, icon: ImageVector, onClick: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Icon(
-                imageVector = icon,
+                imageVector = Icons.Outlined.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp),
@@ -353,6 +349,3 @@ private fun LinkRow(label: String, icon: ImageVector, onClick: () -> Unit) {
         }
     }
 }
-
-private const val PRIVACY_POLICY_URL = "https://github.com/sashka1850/VoiceSearch/blob/master/PRIVACY_POLICY.md"
-private const val SOURCE_URL = "https://github.com/sashka1850/VoiceSearch"

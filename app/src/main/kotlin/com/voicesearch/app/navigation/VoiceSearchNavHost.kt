@@ -15,6 +15,7 @@ import com.voicesearch.app.feature.tablesettings.ui.TableSettingsScreen
 import com.voicesearch.app.ui.home.HomeScreen
 import com.voicesearch.app.ui.onboarding.OnboardingScreen
 import com.voicesearch.app.ui.onboarding.OnboardingViewModel
+import com.voicesearch.app.ui.settings.PrivacyPolicyScreen
 import com.voicesearch.app.ui.settings.SettingsScreen
 import com.voicesearch.app.ui.tableslist.TablesListScreen
 
@@ -76,7 +77,13 @@ fun VoiceSearchNavHost(
             )
         }
         composable(Routes.APP_SETTINGS) {
-            SettingsScreen(onBack = { navController.popBackStack() })
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenPrivacyPolicy = { navController.navigate(Routes.PRIVACY_POLICY) },
+            )
+        }
+        composable(Routes.PRIVACY_POLICY) {
+            PrivacyPolicyScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.ONBOARDING) {
             OnboardingScreen(

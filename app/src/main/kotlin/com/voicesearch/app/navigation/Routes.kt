@@ -14,6 +14,9 @@ internal object Routes {
     /** App-level settings: theme + about. */
     const val APP_SETTINGS = "app_settings"
 
+    /** In-app privacy policy; reached from App Settings. */
+    const val PRIVACY_POLICY = "privacy_policy"
+
     /** First-launch intro slides. */
     const val ONBOARDING = "onboarding"
 

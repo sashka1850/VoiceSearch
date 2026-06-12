@@ -1,5 +1,7 @@
 package com.voicesearch.core.data.di
 
+import com.voicesearch.core.data.crash.CrashReporter
+import com.voicesearch.core.data.crash.FileCrashReporter
 import com.voicesearch.core.data.datastore.AppPreferencesRepositoryImpl
 import com.voicesearch.core.data.datastore.YandexAuthRepositoryImpl
 import com.voicesearch.core.data.repository.TableRepositoryImpl
@@ -37,4 +39,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     internal abstract fun bindYandexAuthRepository(impl: YandexAuthRepositoryImpl): YandexAuthRepository
+
+    @Binds
+    @Singleton
+    internal abstract fun bindCrashReporter(impl: FileCrashReporter): CrashReporter
 }

@@ -19,6 +19,15 @@ val localProps = Properties().apply {
 val yandexClientId: String = localProps.getProperty("YANDEX_CLIENT_ID", "")
 val yandexClientSecret: String = localProps.getProperty("YANDEX_CLIENT_SECRET", "")
 
+// Release signing — credentials live in keystore.properties (gitignored).
+// If absent, release build falls back to the debug keystore so a fresh clone
+// can still build a runnable (but un-shippable) APK for testing.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val hasReleaseKeystore = keystoreProps.containsKey("RELEASE_STORE_FILE")
+
 android {
     namespace = "com.voicesearch.app"
     compileSdk = 36
@@ -50,6 +59,17 @@ android {
         manifestPlaceholders["yandexRedirectHost"] = yandexClientId
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("RELEASE_STORE_FILE"))
+                storePassword = keystoreProps.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = keystoreProps.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = keystoreProps.getProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -62,6 +82,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Sign with the real release key when keystore.properties is present
+            // (= dev machine / CI with secrets), otherwise debug keystore so the
+            // release build still verifies locally on a fresh clone.
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

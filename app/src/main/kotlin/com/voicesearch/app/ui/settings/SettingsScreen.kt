@@ -18,12 +18,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SettingsBrightness
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,21 +38,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voicesearch.app.BuildConfig
 import com.voicesearch.core.domain.repository.ThemeMode
 import com.voicesearch.core.ui.theme.LocalElevation
+import java.io.File
+import java.util.ArrayList
 
 @Suppress("LongMethod") // Compose entry-point that wires Scaffold + a couple of section cards.
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,7 +69,9 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val theme by viewModel.themeMode.collectAsStateWithLifecycle()
+    val crashLogs by viewModel.crashLogs.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showClearDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -108,6 +121,37 @@ fun SettingsScreen(
                 )
             }
 
+            SectionCard(label = "Диагностика", icon = Icons.Outlined.BugReport) {
+                if (crashLogs.isEmpty()) {
+                    Text(
+                        text = "Логов падений нет — приложение работает стабильно.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                } else {
+                    Text(
+                        text = "Сохранено логов: ${crashLogs.size}. " +
+                            "Файлы хранятся локально; можно отправить разработчику для анализа.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    LinkRow(
+                        label = "Поделиться логами",
+                        icon = Icons.Outlined.Share,
+                        onClick = { shareCrashLogs(context, crashLogs) },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    LinkRow(
+                        label = "Удалить все логи",
+                        icon = Icons.Outlined.DeleteSweep,
+                        onClick = { showClearDialog = true },
+                    )
+                }
+            }
+
             SectionCard(label = "О приложении", icon = Icons.Outlined.Info) {
                 AboutRow(
                     primary = "Версия",
@@ -142,6 +186,54 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Удалить логи падений?") },
+            text = {
+                Text(
+                    "После удаления восстановить файлы будет невозможно. " +
+                        "Это действие никак не влияет на ваши таблицы.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearCrashLogs()
+                        showClearDialog = false
+                    },
+                ) { Text("Удалить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
+            },
+        )
+    }
+}
+
+/**
+ * Wraps every crash log file in a FileProvider URI and hands them to the
+ * system share sheet via `ACTION_SEND_MULTIPLE`. Failing silently is fine —
+ * the chooser shows an error if no app can handle it.
+ */
+private fun shareCrashLogs(context: android.content.Context, files: List<File>) {
+    if (files.isEmpty()) return
+    val authority = "${context.packageName}.fileprovider"
+    val uris = ArrayList(
+        files.map { FileProvider.getUriForFile(context, authority, it) },
+    )
+
+    val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+        type = "text/plain"
+        putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        putExtra(Intent.EXTRA_SUBJECT, "VoiceSearch crash logs")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    val chooser = Intent.createChooser(intent, "Поделиться логами")
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(chooser) }
 }
 
 @Composable

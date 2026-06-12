@@ -19,6 +19,8 @@ Android-приложение для голосового / клавиатурн�
 - 🌓 **Светлая / тёмная / системная тема**
 - 🛡️ **Никакой аналитики**, никаких сторонних сервисов кроме Яндекс.Диска
   (по явному выбору пользователя)
+- 🐞 **Локальные логи падений** — стек-трейсы пишутся в файл, который
+  пользователь сам решает отправлять или удалить через настройки
 
 ## Стек
 
@@ -60,6 +62,51 @@ YANDEX_CLIENT_SECRET=ваш_client_secret
 Основной канал распространения — **RuStore**. Приложение не использует
 Google Play Services, Firebase, Google Sign-In и не зависит от GMS — собирается
 без `google-services.json` и работает на устройствах без сервисов Google.
+
+Пошаговый гайд по подготовке метаданных, графики и обоснования
+разрешений — в [docs/RUSTORE_PUBLISHING.md](./docs/RUSTORE_PUBLISHING.md).
+
+## Релизная сборка
+
+### 1. Сгенерировать keystore
+
+Один раз на проекте:
+
+```bash
+keytool -genkeypair -v \
+  -keystore voicesearch-release.jks \
+  -alias voicesearch \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -storetype JKS
+```
+
+Положите `.jks` в корень проекта или в безопасное место. **Бекапить** —
+без него выпуск обновлений невозможен.
+
+### 2. Создать `keystore.properties`
+
+Скопируйте `keystore.properties.example` → `keystore.properties` (gitignored)
+и заполните паролями. Build-скрипт сам подхватит при наличии файла.
+
+### 3. Собрать AAB для RuStore
+
+```bash
+./gradlew :app:bundleRelease
+```
+
+Результат: `app/build/outputs/bundle/release/app-release.aab`. Этот файл
+загружается в RuStore Developer Console.
+
+Чтобы посмотреть APK локально (например для теста на эмуляторе):
+
+```bash
+./gradlew :app:assembleRelease
+adb install app/build/outputs/apk/release/app-release.apk
+```
+
+Если `keystore.properties` отсутствует, release-сборка подписывается
+debug-ключом — собирается, но в стор не уйдёт. Это удобно для прогона
+R8 на CI без секретов в репо.
 
 ## Конфиденциальность
 

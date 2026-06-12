@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Background color of the adaptive launcher icon. Matches the soft blue
+      `icon-rounded` PNG ships with so the icon reads the same on launchers
+      that crop to a circle as it does as a flat square.
+    -->
+    <color name="ic_launcher_background">#E8EDFF</color>
+</resources>

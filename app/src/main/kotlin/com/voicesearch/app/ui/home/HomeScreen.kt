@@ -227,33 +227,27 @@ private fun HomeScreenContent(
                 TopAppBar(
                     title = { Text(text = state.tableName, style = MaterialTheme.typography.titleLarge) },
                     actions = {
-                        IconButton(onClick = callbacks.onToggleAutoSync) {
-                            Icon(
-                                imageVector = if (state.autoSyncEnabled) {
-                                    Icons.Filled.Sync
-                                } else {
-                                    Icons.Outlined.SyncDisabled
-                                },
-                                contentDescription = if (state.autoSyncEnabled) {
-                                    "Авто-синхронизация включена"
-                                } else {
-                                    "Авто-синхронизация выключена"
-                                },
-                                tint = if (state.autoSyncEnabled) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
-                        }
+                        SyncStatusButton(
+                            yandexAuthenticated = state.yandexAuthenticated,
+                            hasSyncError = state.info?.sync?.lastError != null,
+                            lastSuccessAt = state.info?.sync?.lastSuccessAt,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            onClick = if (state.yandexAuthenticated) {
+                                callbacks.onSyncNow
+                            } else {
+                                callbacks.onConnectYandex
+                            },
+                        )
                         TableMenu(
                             yandexAuthenticated = state.yandexAuthenticated,
+                            autoSyncEnabled = state.autoSyncEnabled,
                             onShare = callbacks.onShare,
                             onOpenSettings = onOpenSettings,
                             onOpenAppSettings = onOpenAppSettings,
                             onOpenTablesList = onOpenTablesList,
                             onConnectYandex = callbacks.onConnectYandex,
                             onSyncNow = callbacks.onSyncNow,
+                            onToggleAutoSync = callbacks.onToggleAutoSync,
                             onSignOutYandex = callbacks.onSignOutYandex,
                         )
                     },
@@ -480,11 +474,7 @@ private fun ActiveDock(
                 // success notification flies as a top snackbar so it doesn't
                 // shove the card around.
                 if (state.info != null) {
-                    TableInfoCard(
-                        info = state.info,
-                        nowMillis = nowMillis,
-                        yandexAuthenticated = state.yandexAuthenticated,
-                    )
+                    TableInfoCard(info = state.info, nowMillis = nowMillis)
                     Spacer(Modifier.height(16.dp))
                 }
                 if (state.mic == MicState.Idle && state.lastOutcome == null && !typing) {
@@ -760,12 +750,14 @@ private fun EmptyState(onAddTable: () -> Unit) {
 @Composable
 private fun TableMenu(
     yandexAuthenticated: Boolean,
+    autoSyncEnabled: Boolean,
     onShare: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onOpenTablesList: () -> Unit,
     onConnectYandex: () -> Unit,
     onSyncNow: () -> Unit,
+    onToggleAutoSync: () -> Unit,
     onSignOutYandex: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -799,6 +791,25 @@ private fun TableMenu(
                     text = { Text("Синхронизировать с Я.Диском") },
                     leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
                     onClick = { open = false; onSyncNow() },
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (autoSyncEnabled) "Авто-синхронизация: вкл" else "Авто-синхронизация: выкл",
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (autoSyncEnabled) Icons.Filled.Sync else Icons.Outlined.SyncDisabled,
+                            contentDescription = null,
+                            tint = if (autoSyncEnabled) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    },
+                    onClick = { open = false; onToggleAutoSync() },
                 )
                 DropdownMenuItem(
                     text = { Text("Выйти из Я.Диска") },

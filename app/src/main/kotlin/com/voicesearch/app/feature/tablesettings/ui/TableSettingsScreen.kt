@@ -126,6 +126,8 @@ fun TableSettingsScreen(
                     headers = state.headers,
                     selectedIndex = state.searchColumnIndex,
                     onSelect = viewModel::onSearchColumnChange,
+                    helperText = searchColumnHelper(state),
+                    isError = !state.isLoading && state.searchColumnFilledCount == 0,
                 )
                 PrefixHintCard(state.prefixHint)
                 ColumnPickerCard(
@@ -139,6 +141,8 @@ fun TableSettingsScreen(
                     headers = state.headers,
                     selectedIndex = state.markColumnIndex,
                     onSelect = viewModel::onMarkColumnChange,
+                    helperText = markColumnHelper(state),
+                    isError = !state.isLoading && state.markColumnFilledCount > 0,
                 )
                 MarkerCard(value = state.successMarker, onChange = viewModel::onSuccessMarkerChange)
                 StartRowCard(value = state.startRowIndex, onChange = viewModel::onStartRowChange)
@@ -154,7 +158,7 @@ fun TableSettingsScreen(
             PrimaryButton(
                 text = if (state.isSaving) "Сохраняем…" else "Сохранить",
                 onClick = viewModel::save,
-                enabled = !state.isSaving,
+                enabled = state.canSave,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -208,22 +212,37 @@ private fun ColumnPickerCard(
     headers: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
+    helperText: String? = null,
+    isError: Boolean = false,
 ) {
     SettingsCard(label = label) {
         var expanded by remember { mutableStateOf(false) }
-        val current = headers.getOrNull(selectedIndex)?.ifBlank { "Колонка ${selectedIndex + 1}" }
-            ?: "Колонка ${selectedIndex + 1}"
+        val current = headers.getOrNull(selectedIndex)?.ifBlank { "Колонка ${columnLetters(selectedIndex)}" }
+            ?: "Колонка ${columnLetters(selectedIndex)}"
         Box {
             OutlinedTextField(
                 value = current,
                 onValueChange = {},
                 readOnly = true,
+                isError = isError,
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     IconButton(onClick = { expanded = true }) {
                         Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                     }
                 },
+                supportingText = if (helperText != null) {
+                    {
+                        Text(
+                            text = helperText,
+                            color = if (isError) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                } else null,
             )
             DropdownMenu(
                 expanded = expanded,
@@ -232,7 +251,7 @@ private fun ColumnPickerCard(
             ) {
                 headers.forEachIndexed { index, header ->
                     DropdownMenuItem(
-                        text = { Text(text = header.ifBlank { "Колонка ${index + 1}" }) },
+                        text = { Text(text = header.ifBlank { "Колонка ${columnLetters(index)}" }) },
                         onClick = {
                             onSelect(index)
                             expanded = false
@@ -314,5 +333,47 @@ private fun SettingsCard(label: String, content: @Composable () -> Unit) {
             content()
         }
     }
+}
+
+/**
+ * Excel-style column letters: 0 → "A", 1 → "B", … 25 → "Z", 26 → "AA",
+ * 27 → "AB", … Lets the user match a column dropdown entry against the
+ * lettered columns they see in Excel / Google Sheets when the header row
+ * is blank.
+ */
+private fun columnLetters(index: Int): String {
+    var n = index
+    val sb = StringBuilder()
+    do {
+        sb.insert(0, 'A' + (n % LETTERS_BASE))
+        n = n / LETTERS_BASE - 1
+    } while (n >= 0)
+    return sb.toString()
+}
+
+private const val LETTERS_BASE = 26
+
+/**
+ * Supporting text for the search-column picker. The user must pick a column
+ * with at least one non-empty data cell — otherwise there's nothing to find.
+ * While the table is still loading we suppress the message so the screen
+ * doesn't flash a red error before any rows are read.
+ */
+private fun searchColumnHelper(state: TableSettingsUiState): String? = when {
+    state.isLoading -> null
+    state.searchColumnFilledCount == 0 -> "Этот столбец пустой — выберите другой."
+    else -> "Найдено значений: ${state.searchColumnFilledCount} из ${state.totalDataRows}"
+}
+
+/**
+ * Supporting text for the mark-column picker. The column must be empty so
+ * the app's marker doesn't overwrite anything the user already had there.
+ */
+private fun markColumnHelper(state: TableSettingsUiState): String? = when {
+    state.isLoading -> null
+    state.markColumnFilledCount > 0 ->
+        "В столбце уже есть значения (${state.markColumnFilledCount} шт.). " +
+            "Выберите пустой столбец, чтобы не перетереть данные."
+    else -> "Столбец пустой — можно использовать для отметок."
 }
 

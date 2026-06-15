@@ -7,9 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Check
@@ -46,15 +43,16 @@ fun NumericKeypad(
     onBackspace: () -> Unit,
     onDone: () -> Unit,
     canDone: Boolean,
+    letterKeys: List<String> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     var lettersMode by remember { mutableStateOf(false) }
+    val hasLetters = letterKeys.isNotEmpty()
+    // Defensive: if the active table loses its letters (column changed, etc.)
+    // while we're in letters mode, snap back to digits.
+    if (lettersMode && !hasLetters) lettersMode = false
 
     val digitKeys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
-    val letterKeys = listOf(
-        "А", "В", "Е", "К", "М", "Н", "О", "Р", "С", "Т", "У", "Х",
-        "A", "B", "C", "D", "E", "F", "G", "H", "K", "L", "W", "Я",
-    )
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -63,14 +61,17 @@ fun NumericKeypad(
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (lettersMode) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(6),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    userScrollEnabled = false,
-                    modifier = Modifier.height(160.dp),
-                ) {
-                    items(letterKeys) { key -> KeyButton(label = key, onClick = { onKey(key) }) }
+                // 4 × 6 grid built from plain Row/Column so the surface grows
+                // with the content. LazyVerticalGrid with a fixed height was
+                // clipping the bottom row behind the action bar.
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    letterKeys.chunked(6).forEach { rowKeys ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowKeys.forEach { key ->
+                                KeyButton(label = key, onClick = { onKey(key) }, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
                 }
             } else {
                 // 3 × 3 digits, then 0 spanning the last row's middle.
@@ -86,12 +87,14 @@ fun NumericKeypad(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                KeyButton(
-                    label = if (lettersMode) "123" else "АБВ",
-                    onClick = { lettersMode = !lettersMode },
-                    modifier = Modifier.weight(1f),
-                    variant = KeyVariant.Util,
-                )
+                if (hasLetters) {
+                    KeyButton(
+                        label = if (lettersMode) "123" else "АБВ",
+                        onClick = { lettersMode = !lettersMode },
+                        modifier = Modifier.weight(1f),
+                        variant = KeyVariant.Util,
+                    )
+                }
                 if (!lettersMode) {
                     KeyButton(label = "0", onClick = { onKey("0") }, modifier = Modifier.weight(1f))
                 }

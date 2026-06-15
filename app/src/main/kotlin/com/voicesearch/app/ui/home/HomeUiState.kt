@@ -37,6 +37,14 @@ sealed interface HomeUiState {
          * last successful sync. Drives the confirmation dialog before navigation.
          */
         val pendingImport: PendingImport? = null,
+        /**
+         * Letters / symbols (no digits, no whitespace) that actually occur in
+         * the active table's search column, uppercased and deduped. Cyrillic
+         * first, then Latin. Drives the in-app keypad's "АБВ" mode — if the
+         * column contains only digits this list is empty and the keypad
+         * hides its alphabet switch.
+         */
+        val searchColumnAlphabet: List<String> = emptyList(),
     ) : HomeUiState
 }
 

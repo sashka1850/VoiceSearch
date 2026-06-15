@@ -547,6 +547,7 @@ private fun ActiveDock(
                             onBackspace = { callbacks.onManualInputChange(state.manualInput.text.dropLast(1)) },
                             onDone = callbacks.onManualInputSubmit,
                             canDone = canDone,
+                            letterKeys = state.searchColumnAlphabet,
                         )
                     }
                 }

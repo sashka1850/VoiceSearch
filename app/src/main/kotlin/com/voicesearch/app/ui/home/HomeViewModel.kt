@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -85,6 +86,38 @@ class HomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), initialValue = null)
 
+    /**
+     * Distinct non-digit characters from the active table's search column,
+     * uppercased, Cyrillic-first. Recomputed whenever the active table or the
+     * `searchColumnIndex` setting changes — getRows is a one-shot read, not a
+     * Flow, so we wrap it in a flow{} block here.
+     *
+     * Empty list means "this column is all digits / settings unconfigured" —
+     * the keypad hides its alphabet toggle in that case.
+     */
+    private val searchColumnAlphabet: StateFlow<List<String>> =
+        combine(activeTable, activeSettings) { table, settings -> table to settings }
+            .flatMapLatest { (table, settings) ->
+                if (table == null || settings == null) flowOf(emptyList())
+                else flow { emit(computeAlphabet(table.id, settings.searchColumnIndex)) }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptyList())
+
+    private suspend fun computeAlphabet(tableId: String, searchColumnIndex: Int): List<String> {
+        val rows = runCatching { tableRepository.getRows(tableId) }.getOrNull() ?: return emptyList()
+        return rows.asSequence()
+            .mapNotNull { it.cells.getOrNull(searchColumnIndex) }
+            .flatMap { it.asSequence() }
+            .filter { !it.isDigit() && !it.isWhitespace() }
+            .map { it.uppercaseChar() }
+            .distinct()
+            // Cyrillic block (U+0400..U+04FF) sorts before everything else, then
+            // by Unicode codepoint inside each group — Latin ABC stays alphabetical.
+            .sortedWith(compareBy({ it !in 'Ѐ'..'ӿ' }, { it }))
+            .map { it.toString() }
+            .toList()
+    }
+
     private val micState = MutableStateFlow(MicState.Idle)
     private val manualInputState = MutableStateFlow(ManualInputState())
     private val lastOutcome = MutableStateFlow<SearchOutcome?>(null)
@@ -128,6 +161,7 @@ class HomeViewModel @Inject constructor(
             yandexCodeEntry,
             activeTableInfo,
             pendingImport,
+            searchColumnAlphabet,
         ),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
@@ -146,6 +180,8 @@ class HomeViewModel @Inject constructor(
         val info = values[8] as TableInfo?
         @Suppress("UNCHECKED_CAST")
         val pending = values[9] as PendingImport?
+        @Suppress("UNCHECKED_CAST")
+        val alphabet = values[10] as List<String>
 
         if (table == null) {
             HomeUiState.Empty
@@ -165,6 +201,7 @@ class HomeViewModel @Inject constructor(
                 info = info,
                 autoSyncEnabled = settings?.autoSync == true,
                 pendingImport = pending,
+                searchColumnAlphabet = alphabet,
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), HomeUiState.Empty)

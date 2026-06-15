@@ -51,26 +51,36 @@ class TableSettingsViewModel @Inject constructor(
             val existing = settingsRepository.get(tableId)
             val initial = existing ?: defaultsFor(table)
 
+            val searchIdx = initial.searchColumnIndex.coerceIn(0, lastIndex(table))
+            val markIdx = initial.markColumnIndex.coerceIn(0, lastIndex(table))
+
             _state.update {
                 it.copy(
                     isLoading = false,
                     tableName = table.name,
                     headers = table.headers,
                     previewRows = cachedRows.take(PREVIEW_ROWS).map { row -> row.cells },
-                    searchColumnIndex = initial.searchColumnIndex.coerceIn(0, lastIndex(table)),
-                    markColumnIndex = initial.markColumnIndex.coerceIn(0, lastIndex(table)),
+                    searchColumnIndex = searchIdx,
+                    markColumnIndex = markIdx,
                     nameColumnIndex = initial.nameColumnIndex.coerceIn(0, lastIndex(table)),
                     startRowIndex = initial.startRowIndex.coerceAtLeast(0),
                     successMarker = initial.successMarker.ifBlank { "Есть" },
                     autoSyncSupported = table.source is TableSource.YandexDisk,
                     autoSync = initial.autoSync && table.source is TableSource.YandexDisk,
-                    prefixHint = initial.prefix ?: analyzePrefix(initial.searchColumnIndex),
+                    prefixHint = initial.prefix ?: analyzePrefix(searchIdx),
+                    searchColumnFilledCount = filledCountAt(searchIdx),
+                    markColumnFilledCount = filledCountAt(markIdx),
+                    totalDataRows = cachedRows.size,
                 )
             }
         }
     }
 
     private fun lastIndex(table: Table) = (table.headers.size - 1).coerceAtLeast(0)
+
+    /** Number of non-blank cells in [columnIndex] across the cached data rows. */
+    private fun filledCountAt(columnIndex: Int): Int =
+        cachedRows.count { row -> !row.cells.getOrNull(columnIndex).isNullOrBlank() }
 
     private fun defaultsFor(table: Table): TableSettings {
         val nCols = table.headers.size
@@ -98,11 +108,17 @@ class TableSettingsViewModel @Inject constructor(
             it.copy(
                 searchColumnIndex = index,
                 prefixHint = analyzePrefix(index),
+                searchColumnFilledCount = filledCountAt(index),
             )
         }
     }
 
-    fun onMarkColumnChange(index: Int) = _state.update { it.copy(markColumnIndex = index) }
+    fun onMarkColumnChange(index: Int) = _state.update {
+        it.copy(
+            markColumnIndex = index,
+            markColumnFilledCount = filledCountAt(index),
+        )
+    }
     fun onNameColumnChange(index: Int) = _state.update { it.copy(nameColumnIndex = index) }
     fun onSuccessMarkerChange(value: String) = _state.update { it.copy(successMarker = value) }
     fun onStartRowChange(value: Int) = _state.update { it.copy(startRowIndex = value.coerceAtLeast(0)) }
@@ -113,6 +129,21 @@ class TableSettingsViewModel @Inject constructor(
         if (snapshot.isLoading || snapshot.isSaving) return
         if (snapshot.successMarker.isBlank()) {
             _state.update { it.copy(errorMessage = "Маркер успеха не может быть пустым") }
+            return
+        }
+        if (snapshot.searchColumnFilledCount == 0) {
+            _state.update {
+                it.copy(errorMessage = "Столбец поиска пуст — выберите другой столбец")
+            }
+            return
+        }
+        if (snapshot.markColumnFilledCount > 0) {
+            _state.update {
+                it.copy(
+                    errorMessage = "Столбец отметки не пуст (${snapshot.markColumnFilledCount} значений). " +
+                        "Отметки перетрут эти данные — выберите пустой столбец.",
+                )
+            }
             return
         }
         viewModelScope.launch {

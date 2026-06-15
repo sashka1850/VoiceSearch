@@ -51,6 +51,7 @@ import kotlinx.coroutines.delay
  * — that paints `tint` over every non-transparent pixel the Lottie engine
  * drew, working for fills and strokes regardless of layer structure.
  */
+@Suppress("LongMethod") // Composable wiring: animation state + dynamic-properties + IconButton.
 @Composable
 fun SyncStatusButton(
     yandexAuthenticated: Boolean,

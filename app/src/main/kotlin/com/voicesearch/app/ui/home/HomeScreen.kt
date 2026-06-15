@@ -26,8 +26,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.Login
@@ -71,13 +69,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -435,9 +429,10 @@ private fun YandexCodeDialog(
  * control row for the in-app [NumericKeypad] — the field stays right above the
  * keys, never covered.
  *
- * For [PromptHint.FullValue] tables (no prefix) the keypad's limited charset
- * isn't enough, so we drop back to a system-IME [OutlinedTextField] in the
- * same slot.
+ * The keypad is the only manual-input surface — used for every prompt
+ * variant. For [PromptHint.FullValue] / [PromptHint.NotConfigured] tables
+ * `slotInfo` is null, so we feed the keypad `slotCount = 0` (unlimited)
+ * and enable "Найти" as soon as anything is typed.
  */
 @Suppress("LongMethod") // Compose entry-point that wires the dock + status stage.
 @Composable
@@ -536,22 +531,23 @@ private fun ActiveDock(
                                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
                             }
                         }
-                        if (slotInfo != null) {
-                            NumericKeypad(
-                                onKey = { key ->
-                                    appendCapped(state.manualInput.text, key, slotInfo.slots, callbacks.onManualInputChange)
-                                },
-                                onBackspace = { callbacks.onManualInputChange(state.manualInput.text.dropLast(1)) },
-                                onDone = callbacks.onManualInputSubmit,
-                                canDone = state.manualInput.text.length == slotInfo.slots,
-                            )
+                        // Custom keypad is the default input for every table type.
+                        // FullValue / NotConfigured pass slotCount = 0 — keypad runs
+                        // unlimited, "find" enables as soon as anything's typed.
+                        val slots = slotInfo?.slots ?: 0
+                        val canDone = if (slots > 0) {
+                            state.manualInput.text.length == slots
                         } else {
-                            SystemKeyboardField(
-                                text = state.manualInput.text,
-                                onChange = callbacks.onManualInputChange,
-                                onSubmit = callbacks.onManualInputSubmit,
-                            )
+                            state.manualInput.text.isNotBlank()
                         }
+                        NumericKeypad(
+                            onKey = { key ->
+                                appendCapped(state.manualInput.text, key, slots, callbacks.onManualInputChange)
+                            },
+                            onBackspace = { callbacks.onManualInputChange(state.manualInput.text.dropLast(1)) },
+                            onDone = callbacks.onManualInputSubmit,
+                            canDone = canDone,
+                        )
                     }
                 }
                 AnimatedVisibility(
@@ -662,47 +658,6 @@ private fun MicCaption(mic: MicState) {
             )
         }
     }
-}
-
-/**
- * System-IME fallback used when there's no prefix to constrain input.
- * Auto-focuses on appear so the soft keyboard opens immediately; the IME
- * Search action submits.
- */
-@Composable
-private fun SystemKeyboardField(
-    text: String,
-    onChange: (String) -> Unit,
-    onSubmit: () -> Unit,
-) {
-    val focusRequester = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
-    OutlinedTextField(
-        value = text,
-        onValueChange = onChange,
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusRequester(focusRequester),
-        placeholder = { Text("Введите значение для поиска") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = {
-            onSubmit()
-            keyboard?.hide()
-        }),
-        trailingIcon = {
-            if (text.isNotEmpty()) {
-                IconButton(onClick = { onChange("") }) {
-                    Icon(Icons.Default.Close, contentDescription = "Очистить")
-                }
-            }
-        },
-    )
 }
 
 @Composable

@@ -157,8 +157,13 @@ private fun KeyButton(
     }
 }
 
-/** Caps appended input to [slotCount] and routes through the existing change callback. */
+/**
+ * Caps appended input to [slotCount] and routes through the existing change
+ * callback. Pass `slotCount = 0` (or any non-positive value) for unlimited
+ * length — used for FullValue tables where the search column has no fixed
+ * suffix and the user types arbitrary text.
+ */
 fun appendCapped(current: String, key: String, slotCount: Int, onChange: (String) -> Unit) {
-    if (slotCount in 1..current.length) return
+    if (slotCount > 0 && current.length >= slotCount) return
     onChange(current + key)
 }
